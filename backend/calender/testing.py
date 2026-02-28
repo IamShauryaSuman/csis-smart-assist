@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-from check import is_slot_available,find_nearby_free_slots,print_slots
+from backend.calender.functions import *
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
@@ -20,9 +20,13 @@ per=60
         
 free = is_slot_available(start, per, service,calenderID)
 print("Free?", free)
-if free==False:
-    avail= find_nearby_free_slots(start,per,service,calendarID=calenderID)
-    print_slots(avail)
+# if free==False:
+#     avail= find_nearby_free_slots(start,per,service,calendarID=calenderID)
+#     print(avail[0])
+#     create_event(service=service,calendarID=calenderID,start_time=avail[0][0],end_time=avail[0][1],title='Testing')
+#     #print_slots(avail)
+
+
 
 # calendar_list = service.calendarList().list().execute()
 

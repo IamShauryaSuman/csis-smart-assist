@@ -1,12 +1,16 @@
 from datetime import timezone
 from datetime import timedelta, timezone
 from zoneinfo import ZoneInfo
+
+from dotenv import load_dotenv
+import os
+
 ist = ZoneInfo("Asia/Kolkata")
 
 def is_slot_available(start_time, per, service,calenderID):
     """
     Returns True if the slot is free, False if busy
-    """
+    """ 
 
     # 1. Normalize times to UTC
     start_time = start_time.astimezone(timezone.utc)
@@ -74,3 +78,66 @@ def print_slots(slots):
             f"{i}. {start_ist.strftime('%d %b %Y, %I:%M %p')} "
             f"→ {end_ist.strftime('%I:%M %p')}"
         )
+
+from datetime import timezone
+
+def create_event(
+    service,
+    calendarID,
+    start_time,
+    end_time,
+    title,
+    description=None,
+    location=None
+):
+    """
+    Creates a Google Calendar event.
+    Returns the created event.
+    """
+
+    # Normalize to UTC
+    start_time = start_time.astimezone(timezone.utc)
+    end_time   = end_time.astimezone(timezone.utc)
+
+    event = {
+        "summary": title,
+        "start": {
+            "dateTime": start_time.isoformat(),
+            "timeZone": "UTC",
+        },
+        "end": {
+            "dateTime": end_time.isoformat(),
+            "timeZone": "UTC",
+        }
+    }
+
+    if description:
+        event["description"] = description
+    if location:
+        event["location"] = location
+
+    created_event = service.events().insert(
+        calendarId=calendarID,
+        body=event
+    ).execute()
+
+    return created_event
+
+import smtplib
+from email.message import EmailMessage
+
+EMAIL = "sapphire.csis.no.reply@gmail.com"
+APP_PASSWORD = os.getenv("APP_PASSWORD")
+
+def send_email(title, email_receiver, subject):
+    msg = EmailMessage()
+    msg["From"] = EMAIL
+    msg["To"] = email_receiver
+    msg["Subject"] = subject
+    msg.set_content(title)
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(EMAIL, APP_PASSWORD)
+        server.send_message(msg)
+
+    print(f"✅ Email sent to {email_receiver}")
