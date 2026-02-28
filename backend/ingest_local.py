@@ -4,7 +4,7 @@ from Chatbot.services.rag.drive_connector import extract_text
 from Chatbot.services.rag.vector_store import chunk_text, embed, create_vector_store
 
 def ingest_directory(directory_path: str):
-    """Reads all PDF and TXT files in a directory and adds them to ChromaDB."""
+    """Reads all PDF, DOCX, HTML, and TXT files in a directory and adds them to ChromaDB."""
     if not os.path.exists(directory_path):
         print(f"Error: Directory '{directory_path}' does not exist.")
         return
@@ -24,6 +24,8 @@ def ingest_directory(directory_path: str):
             mime_type = "application/pdf"
         elif filename.lower().endswith('.docx'):
             mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        elif filename.lower().endswith('.html') or filename.lower().endswith('.htm'):
+            mime_type = "text/html"
             
         with open(filepath, 'rb') as f:
             file_content = f.read()
@@ -47,7 +49,7 @@ def ingest_directory(directory_path: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Ingest local documents into the Chatbot Vector Store.")
-    parser.add_argument("--dir", type=str, default="./data", help="Directory containing PDF/DOCX/TXT files")
+    parser.add_argument("--dir", type=str, default="./data", help="Directory containing PDF/DOCX/HTML/TXT files")
     args = parser.parse_args()
     
     ingest_directory(args.dir)

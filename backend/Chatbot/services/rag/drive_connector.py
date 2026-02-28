@@ -7,6 +7,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 import PyPDF2
 import docx
+from bs4 import BeautifulSoup
 
 from Chatbot.core.config import settings
 
@@ -93,6 +94,9 @@ def extract_text(file_content: bytes, mime_type: str) -> str:
             doc = docx.Document(io.BytesIO(file_content))
             for para in doc.paragraphs:
                 text += para.text + "\n"
+        elif 'html' in mime_type:
+            soup = BeautifulSoup(file_content, 'html.parser')
+            text = soup.get_text(separator=' ', strip=True)
         else:
             # Fallback for plain text or mock
             text = file_content.decode('utf-8', errors='ignore')
