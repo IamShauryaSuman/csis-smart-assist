@@ -39,6 +39,30 @@ type BookingRequest = {
   status: "pending" | "accepted" | "declined";
 };
 
+type BackendBookingRequest = {
+  id: string;
+  requester_user_id: string;
+  resource: string;
+  date: string;
+  time_slot: string;
+  purpose: string;
+  participants: number;
+  remarks: string | null;
+  status: "pending" | "accepted" | "declined";
+};
+
+type SyncedUserPayload = {
+  user?: {
+    id?: string;
+    email?: string;
+    full_name?: string | null;
+  };
+  roles?: string[];
+};
+
+const backendUrl =
+  process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
+
 const initialSlots: Slot[] = [
   {
     id: "LIB-A-1000",
@@ -190,13 +214,9 @@ const formatHistoryTime = (isoDate: string) => {
 
 function HomePage() {
   const { data: session, status } = useSession();
-  const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? "")
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean);
-  const isAdmin = session?.user?.email
-    ? adminEmails.includes(session.user.email.toLowerCase())
-    : false;
+  const [userRoles, setUserRoles] = useState<string[]>([]);
+  const [syncedUserId, setSyncedUserId] = useState<string | null>(null);
+  const isAdmin = userRoles.includes("admin");
 
   const [chatSessions, setChatSessions] =
     useState<ChatSession[]>(initialChatSessions);
@@ -204,8 +224,8 @@ function HomePage() {
   const [bookingRequests, setBookingRequests] = useState<BookingRequest[]>(
     initialBookingRequests,
   );
+  const [slots, setSlots] = useState<Slot[]>(initialSlots);
 
-  const slots = initialSlots;
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -230,6 +250,116 @@ function HomePage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeChat?.id, messages?.length, isLoading]);
+
+  useEffect(() => {
+    if (!session?.user?.email) {
+      setUserRoles([]);
+      setSyncedUserId(null);
+      return;
+    }
+
+    const syncSessionUser = async () => {
+      try {
+        const response = await fetch(`${backendUrl}/users/sync-session`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: session.user?.email,
+            full_name: session.user?.name,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to sync user");
+        }
+
+        const payload = (await response.json()) as SyncedUserPayload;
+        setSyncedUserId(payload.user?.id ?? null);
+        setUserRoles(payload.roles ?? []);
+      } catch {
+        setSyncedUserId(null);
+        setUserRoles([]);
+      }
+    };
+
+    syncSessionUser();
+  }, [session]);
+
+  useEffect(() => {
+    if (!session || !isAdmin) return;
+
+    const loadRequests = async () => {
+      try {
+        const response = await fetch(`${backendUrl}/booking-requests`);
+        if (!response.ok) return;
+        const data = (await response.json()) as BackendBookingRequest[];
+        setBookingRequests(
+          data.map((request) => ({
+            id: request.id,
+            requester: request.requester_user_id,
+            resource: request.resource,
+            date: request.date,
+            time: request.time_slot,
+            purpose: request.purpose,
+            participants: request.participants,
+            remarks: request.remarks ?? "",
+            status: request.status,
+          })),
+        );
+      } catch {}
+    };
+
+    loadRequests();
+  }, [isAdmin, session]);
+
+  useEffect(() => {
+    if (!session || isAdmin) return;
+
+    const loadNearbySlots = async () => {
+      try {
+        const now = new Date();
+        const response = await fetch(`${backendUrl}/calendar/nearby-slots`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            start_iso: now.toISOString(),
+            duration_minutes: 60,
+            window_hours: 3,
+          }),
+        });
+
+        if (!response.ok) return;
+        const payload = (await response.json()) as {
+          free_slots?: { start_iso: string; end_iso: string }[];
+        };
+        if (!payload.free_slots || payload.free_slots.length === 0) return;
+
+        const mappedSlots: Slot[] = payload.free_slots
+          .slice(0, 6)
+          .map((slot, index) => {
+            const start = new Date(slot.start_iso);
+            const end = new Date(slot.end_iso);
+            return {
+              id: `CAL-${index}`,
+              resource: "Calendar Room",
+              date: start.toISOString().split("T")[0],
+              time: `${start.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}-${end.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}`,
+              status: "available",
+            };
+          });
+
+        setSlots(mappedSlots);
+      } catch {}
+    };
+
+    loadNearbySlots();
+  }, [isAdmin, session]);
 
   const createNewChat = () => {
     if (isLoading) return;
@@ -287,35 +417,70 @@ function HomePage() {
     setInput("");
     setIsLoading(true);
 
-    setTimeout(() => {
-      const botResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content:
-          "Mock mode: I can cite docs and propose booking slots once backend is connected.",
-        citations: [
-          {
-            name: "StudentHandbook_2026.md",
-            link: "#",
-            excerpt:
-              "Use approved resources only and submit booking requests at least 2 hours in advance.",
-          },
-        ],
-      };
+    (async () => {
+      try {
+        const response = await fetch(`${backendUrl}/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: userInput,
+            user_id: session?.user?.email ?? "anonymous",
+          }),
+        });
 
-      setChatSessions((previous) =>
-        previous.map((chatSession) => {
-          if (chatSession.id !== currentChatId) return chatSession;
+        if (!response.ok) {
+          throw new Error("Chat request failed");
+        }
 
-          return {
-            ...chatSession,
-            updatedAt: new Date().toISOString(),
-            messages: [...chatSession.messages, botResponse],
-          };
-        }),
-      );
-      setIsLoading(false);
-    }, 1500);
+        const payload = (await response.json()) as {
+          answer: string;
+          sources?: { document_id?: string; similarity?: number }[];
+        };
+
+        const botResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: payload.answer,
+          citations:
+            payload.sources?.slice(0, 3).map((source, index) => ({
+              name: source.document_id ?? `Source ${index + 1}`,
+              link: "#",
+              excerpt: `Similarity: ${source.similarity ?? "n/a"}`,
+            })) ?? [],
+        };
+
+        setChatSessions((previous) =>
+          previous.map((chatSession) => {
+            if (chatSession.id !== currentChatId) return chatSession;
+
+            return {
+              ...chatSession,
+              updatedAt: new Date().toISOString(),
+              messages: [...chatSession.messages, botResponse],
+            };
+          }),
+        );
+      } catch {
+        const fallbackResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: "Backend chat is unavailable right now. Please try again.",
+        };
+
+        setChatSessions((previous) =>
+          previous.map((chatSession) => {
+            if (chatSession.id !== currentChatId) return chatSession;
+            return {
+              ...chatSession,
+              updatedAt: new Date().toISOString(),
+              messages: [...chatSession.messages, fallbackResponse],
+            };
+          }),
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    })();
   };
 
   const slotStatusColor = (slotStatus: Slot["status"]) => {
@@ -342,11 +507,45 @@ function HomePage() {
     requestId: string,
     decision: "accepted" | "declined",
   ) => {
+    const selected = bookingRequests.find(
+      (request) => request.id === requestId,
+    );
+    if (!selected || selected.status !== "pending") return;
+
     setBookingRequests((previous) =>
       previous.map((request) =>
         request.id === requestId ? { ...request, status: decision } : request,
       ),
     );
+
+    (async () => {
+      try {
+        const response = await fetch(
+          `${backendUrl}/booking-requests/${requestId}/decision`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: decision,
+              remarks: selected.remarks,
+              reviewer_user_id: syncedUserId,
+            }),
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to save decision");
+        }
+      } catch {
+        setBookingRequests((previous) =>
+          previous.map((request) =>
+            request.id === requestId
+              ? { ...request, status: "pending" }
+              : request,
+          ),
+        );
+      }
+    })();
   };
 
   if (status === "loading") {

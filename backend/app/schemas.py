@@ -13,7 +13,7 @@ class BookingStatus(str, Enum):
 
 
 class UserSyncIn(BaseModel):
-    id: UUID
+    id: UUID | None = None
     email: EmailStr
     full_name: str | None = None
 
@@ -55,3 +55,25 @@ class RagChunkCreateIn(BaseModel):
 class RagSearchIn(BaseModel):
     embedding: list[float]
     match_count: int = Field(default=5, ge=1, le=50)
+
+
+class ChatRequestIn(BaseModel):
+    query: str = Field(min_length=1)
+    user_id: str = Field(min_length=1)
+
+
+class ChatResponseOut(BaseModel):
+    answer: str
+    sources: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class CalendarAvailabilityIn(BaseModel):
+    start_iso: str
+    duration_minutes: int = Field(default=60, ge=15, le=240)
+
+
+class CalendarNearbyIn(BaseModel):
+    start_iso: str
+    duration_minutes: int = Field(default=60, ge=15, le=240)
+    window_hours: int = Field(default=3, ge=1, le=24)
+    step_minutes: int | None = Field(default=None, ge=5, le=240)

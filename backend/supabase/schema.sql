@@ -2,7 +2,7 @@ create extension if not exists pgcrypto;
 create extension if not exists vector;
 
 create table if not exists public.app_users (
-  id uuid primary key references auth.users(id) on delete cascade,
+  id uuid primary key default gen_random_uuid(),
   email text not null unique,
   full_name text,
   created_at timestamptz not null default timezone('utc', now()),

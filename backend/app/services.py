@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import NAMESPACE_DNS, UUID, uuid5
 
 from fastapi import HTTPException
 from supabase import Client
@@ -21,15 +21,16 @@ class SupabaseService:
         self.vector_dimensions = vector_dimensions
 
     def sync_user(self, payload: UserSyncIn) -> dict:
+        resolved_id = payload.id or uuid5(NAMESPACE_DNS, payload.email.lower())
         response = (
             self.client.table("app_users")
             .upsert(
                 {
-                    "id": str(payload.id),
+                    "id": str(resolved_id),
                     "email": payload.email,
                     "full_name": payload.full_name,
                 },
-                on_conflict="id",
+                on_conflict="email",
             )
             .execute()
         )
@@ -91,6 +92,39 @@ class SupabaseService:
             if row.get("roles") and row["roles"].get("name")
         ]
         return {"user_id": str(user_id), "roles": role_names}
+
+    def list_user_roles_by_email(self, email: str) -> dict:
+        user_response = (
+            self.client.table("app_users")
+            .select("id,email")
+            .eq("email", email)
+            .limit(1)
+            .execute()
+        )
+
+        if not user_response.data:
+            return {"user_id": None, "email": email, "roles": []}
+
+        user = user_response.data[0]
+        roles_result = self.list_user_roles(UUID(user["id"]))
+        return {
+            "user_id": user["id"],
+            "email": user["email"],
+            "roles": roles_result["roles"],
+        }
+
+    def ensure_user_roles(
+        self,
+        user_id: UUID,
+        email: str,
+        admin_seed_emails: set[str] | None = None,
+    ) -> list[str]:
+        self.assign_role(user_id=user_id, role_name="user")
+
+        if admin_seed_emails and email.lower() in admin_seed_emails:
+            self.assign_role(user_id=user_id, role_name="admin")
+
+        return self.list_user_roles(user_id=user_id)["roles"]
 
     def create_booking_request(self, payload: BookingRequestCreateIn) -> dict:
         response = (
@@ -214,6 +248,26 @@ class SupabaseService:
             {
                 "query_embedding": self._to_vector_literal(payload.embedding),
                 "match_count": payload.match_count,
+            },
+        ).execute()
+        return response.data or []
+
+    def search_rag_chunks_from_embedding(
+        self,
+        embedding: list[float],
+        match_count: int = 5,
+    ) -> list[dict]:
+        if len(embedding) != self.vector_dimensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Embedding must have {self.vector_dimensions} dimensions",
+            )
+
+        response = self.client.rpc(
+            "match_rag_chunks",
+            {
+                "query_embedding": self._to_vector_literal(embedding),
+                "match_count": match_count,
             },
         ).execute()
         return response.data or []
