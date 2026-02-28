@@ -140,4 +140,4 @@ def send_email(title, email_receiver, subject):
         server.login(EMAIL, APP_PASSWORD)
         server.send_message(msg)
 
-    print(f"✅ Email sent to {email_receiver}")
+    print(f"✅ Email sent to {email_receiver}")    
