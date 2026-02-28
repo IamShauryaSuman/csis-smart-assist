@@ -172,5 +172,5 @@ cython_debug/
 
 # MacOS
 .DS_Store
-token.json
+calender/token.json
 .env
