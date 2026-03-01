@@ -131,7 +131,8 @@ venv.bak/
 # RAG / DB
 RAG_db/
 smartassist.db
-Inductions_Catalogue.pdf
+# NOTE: data/ is NOT ignored — it contains the documents your chatbot learns from.
+# When you clone, the data files come with the repo. Just run ingest_local.py to rebuild RAG_db.
 
 # Spyder project settings
 .spyderproject

@@ -1,56 +1,66 @@
-## Backend setup (Supabase)
+# CSIS SmartAssist - Backend
 
-### 1) Environment
+A RAG-powered chatbot for the CSIS Department at BITS Pilani Goa Campus.
 
-Create `.env` in `backend/` from `.env.example`:
+## Quick Setup (For New Team Members)
 
-- `SUPABASE_URL`
-- `SUPABASE_SECRET_KEY` (preferred server key)
-- `SUPABASE_SERVICE_ROLE_KEY` (legacy fallback)
-- `VECTOR_DIMENSIONS` (default `1536`)
-- `FRONTEND_ORIGIN` (for CORS, default `http://localhost:3000`)
-- `ADMIN_SEED_EMAILS` (comma-separated emails auto-assigned `admin`; all synced users get `user` role)
-- `GEMINI_API_KEY` (required for LLM answer generation)
-- `GOOGLE_CALENDAR_ID`
-- `GOOGLE_CALENDAR_TOKEN_PATH` (default `calender/token.json`)
-
-### 2) Database bootstrap
-
-Run `supabase/schema.sql` in your Supabase SQL editor.
-
-Note: frontend does not need any Supabase key in this architecture because all DB access flows through the backend.
-
-If you previously created `app_users` with a foreign key to `auth.users`, remove that constraint for NextAuth-based login flows.
-
-This creates:
-
-- `app_users`
-- `roles`
-- `user_roles`
-- `booking_requests`
-- `rag_documents`
-- `rag_chunks` (pgvector)
-- `match_rag_chunks` function
-
-### 3) Run API
-
+### 1. Clone the repo
 ```bash
-uvicorn main:app --reload
+git clone https://github.com/IamShauryaSuman/csis-smart-assist.git
+cd csis-smart-assist/backend
 ```
 
-### 4) API summary
+### 2. Create the virtual environment & install dependencies
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-- `POST /chat`
-- `POST /calendar/availability`
-- `POST /calendar/nearby-slots`
-- `POST /users/sync`
-- `POST /users/sync-session`
-- `POST /users/{user_id}/roles`
-- `GET /users/{user_id}/roles`
-- `GET /users/roles/by-email?email=...`
-- `POST /booking-requests`
-- `GET /booking-requests?status=pending|accepted|declined`
-- `PATCH /booking-requests/{request_id}/decision`
-- `POST /rag/documents`
-- `POST /rag/chunks`
-- `POST /rag/chunks/search`
+### 3. Create your `.env` file
+Copy the example and fill in your Gemini API key:
+```bash
+cp .env.example .env
+```
+Then edit `.env` and set:
+```
+GEMINI_API_KEY="your-actual-gemini-api-key"
+```
+You can get a free key from https://aistudio.google.com/apikey
+
+### 4. Build the Vector Database from documents
+The `data/` folder contains the source documents (PDFs, HTML, DOCX, TXT).
+Run this to embed them into ChromaDB:
+```bash
+source .venv/bin/activate
+python ingest_local.py --dir ./data
+```
+> ⚠️ **This step is REQUIRED.** The chatbot cannot answer questions until you run this.
+> The first run will also download the embedding model (~400MB), which may take a few minutes.
+
+### 5. Start the server
+```bash
+source .venv/bin/activate
+uvicorn Chatbot.main:app --host 127.0.0.1 --port 8000
+```
+The API will be live at `http://127.0.0.1:8000`
+Swagger docs at `http://127.0.0.1:8000/docs`
+
+### 6. Test it
+```bash
+curl -X POST "http://127.0.0.1:8000/api/v1/chat/" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is CSIS?", "user_id": "test"}'
+```
+
+## Adding New Documents
+Just drop any `.pdf`, `.docx`, `.html`, or `.txt` files into the `backend/data/` folder, then re-run:
+```bash
+python ingest_local.py --dir ./data
+```
+
+## Important Notes
+- **Always run commands from inside the `backend/` directory** (not the project root)
+- The `RAG_db/` folder is auto-generated and gitignored — each person rebuilds it locally
+- The `.env` file is gitignored — each person creates their own with their API key
+- The `data/` folder IS tracked in git so everyone has the same source documents
