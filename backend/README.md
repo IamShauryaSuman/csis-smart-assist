@@ -38,7 +38,8 @@ Create `.env` in `backend/` from `.env.example` and set:
 - `SUPABASE_SECRET_KEY` (preferred server key)
 - `SUPABASE_SERVICE_ROLE_KEY` (legacy fallback)
 - `VECTOR_DIMENSIONS` (default `1536`)
-- `FRONTEND_ORIGIN` (default `http://localhost:3000`)
+- `FRONTEND_ORIGIN` (legacy single-origin fallback, default `http://localhost:3000`)
+- `FRONTEND_ORIGINS` (preferred, comma-separated allowlist e.g. `http://localhost:3000,https://your-frontend.vercel.app`)
 - `ADMIN_SEED_EMAILS` (comma-separated)
 - `GEMINI_API_KEY` (required for LLM generation)
 - `GOOGLE_CALENDAR_ID`
@@ -96,7 +97,8 @@ This repo includes a root `render.yaml` that deploys `backend/` as a Python web 
 3. Set environment variables in Render service settings:
    - `SUPABASE_URL`
    - `SUPABASE_SECRET_KEY` (or `SUPABASE_SERVICE_ROLE_KEY`)
-   - `FRONTEND_ORIGIN` (your Vercel frontend URL)
+   - `FRONTEND_ORIGINS` (include all frontend URLs that call the API, including Vercel preview/production and local dev)
+   - `FRONTEND_ORIGIN` (optional legacy fallback)
    - `GEMINI_API_KEY` (if chat generation is enabled)
    - `GOOGLE_CALENDAR_ID` and `GOOGLE_CALENDAR_TOKEN_PATH` (if calendar endpoints are used)
    - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SENDER_EMAIL`, `SMTP_SENDER_PASSWORD` (if notifications are enabled)
