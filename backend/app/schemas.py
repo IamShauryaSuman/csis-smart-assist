@@ -23,7 +23,7 @@ class RoleAssignmentIn(BaseModel):
 
 
 class BookingRequestCreateIn(BaseModel):
-    requester_user_id: UUID
+    requester_user_id: str
     resource: str = Field(min_length=2, max_length=100)
     date: date
     time_slot: str = Field(min_length=3, max_length=50)

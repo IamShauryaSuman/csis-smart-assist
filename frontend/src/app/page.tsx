@@ -212,6 +212,8 @@ function HomePage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isBookingActionLoading, setIsBookingActionLoading] = useState(false);
+  const [actionedMessageIds, setActionedMessageIds] = useState<Set<string>>(new Set());
+  const [bookingPurposes, setBookingPurposes] = useState<Record<string, string>>({});
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isAvailabilityOpen, setIsAvailabilityOpen] = useState(false);
 
@@ -268,10 +270,19 @@ function HomePage() {
     );
   };
 
-  const createBookingFromSlot = async (slot: CalendarSlot) => {
-    if (!syncedUserId) {
+  const createBookingFromSlot = async (slot: CalendarSlot, messageId: string) => {
+    const requesterId = syncedUserId || session?.user?.email;
+    if (!requesterId) {
       appendAssistantMessage(
-        "I could not identify your synced user profile yet. Please wait a moment and try again.",
+        "Please sign in first to create a booking request.",
+      );
+      return;
+    }
+
+    const purpose = (bookingPurposes[messageId] || "").trim();
+    if (!purpose) {
+      appendAssistantMessage(
+        "Please enter the **purpose** for this booking before approving.",
       );
       return;
     }
@@ -283,13 +294,13 @@ function HomePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          requester_user_id: syncedUserId,
+          requester_user_id: requesterId,
           resource: slot.resource || "Calendar Room",
           date: bookingSlot.date,
           time_slot: bookingSlot.time_slot,
-          purpose: "Booking request created via SmartAssist chatbot",
+          purpose: purpose,
           participants: 1,
-          remarks: "Auto-created from chat workflow",
+          remarks: "Created via SmartAssist chatbot",
         }),
       });
 
@@ -374,7 +385,7 @@ function HomePage() {
             status: request.status,
           })),
         );
-      } catch {}
+      } catch { }
     };
 
     loadRequests();
@@ -423,7 +434,7 @@ function HomePage() {
           });
 
         setSlots(mappedSlots);
-      } catch {}
+      } catch { }
     };
 
     loadNearbySlots();
@@ -522,12 +533,7 @@ function HomePage() {
           role: "assistant",
           content: payload.answer,
           calendarFlow: payload.calendar_flow,
-          citations:
-            payload.sources?.slice(0, 3).map((source, index) => ({
-              name: source.document_id ?? `Source ${index + 1}`,
-              link: "#",
-              excerpt: `Similarity: ${source.similarity ?? "n/a"}`,
-            })) ?? [],
+          citations: [],
         };
 
         setChatSessions((previous) =>
@@ -818,11 +824,10 @@ function HomePage() {
                       setActiveChatId(chatSession.id);
                       setInput("");
                     }}
-                    className={`flex w-full items-start justify-between gap-3 border px-3 py-2 text-left transition ${
-                      isActive
-                        ? "border-accent bg-bg-surface"
-                        : "border-border hover:bg-bg-surface"
-                    }`}
+                    className={`flex w-full items-start justify-between gap-3 border px-3 py-2 text-left transition ${isActive
+                      ? "border-accent bg-bg-surface"
+                      : "border-border hover:bg-bg-surface"
+                      }`}
                   >
                     <span className="min-w-0 flex-1 truncate text-sm text-text-primary">
                       {chatSession.title}
@@ -906,32 +911,61 @@ function HomePage() {
                   {message.role === "assistant" &&
                     message.calendarFlow?.status === "slot_available" &&
                     message.calendarFlow.requested_slot && (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          onClick={() =>
-                            createBookingFromSlot(
-                              message.calendarFlow!
-                                .requested_slot as CalendarSlot,
-                            )
-                          }
-                          disabled={isBookingActionLoading}
-                          className="border border-success px-3 py-2 font-mono text-xs text-success transition hover:bg-success/10 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isBookingActionLoading
-                            ? "Creating request..."
-                            : "Approve and create request"}
-                        </button>
-                        <button
-                          onClick={() =>
-                            appendAssistantMessage(
-                              "Understood. I did not create the booking request.",
-                            )
-                          }
-                          disabled={isBookingActionLoading}
-                          className="border border-danger px-3 py-2 font-mono text-xs text-danger transition hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          Decline
-                        </button>
+                      <div className="mt-3 space-y-2">
+                        <div>
+                          <label
+                            htmlFor={`purpose-${message.id}`}
+                            className="mb-1 block font-mono text-xs text-text-secondary"
+                          >
+                            Purpose (required)
+                          </label>
+                          <input
+                            id={`purpose-${message.id}`}
+                            type="text"
+                            value={bookingPurposes[message.id] || ""}
+                            onChange={(e) =>
+                              setBookingPurposes((prev) => ({
+                                ...prev,
+                                [message.id]: e.target.value,
+                              }))
+                            }
+                            disabled={actionedMessageIds.has(message.id)}
+                            placeholder="e.g. Extra Tutorial, Lab session, Meeting..."
+                            className="w-full border border-border bg-bg-base px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-link disabled:opacity-60"
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => {
+                              setActionedMessageIds((prev) => new Set(prev).add(message.id));
+                              createBookingFromSlot(
+                                message.calendarFlow!
+                                  .requested_slot as CalendarSlot,
+                                message.id,
+                              );
+                            }}
+                            disabled={isBookingActionLoading || actionedMessageIds.has(message.id)}
+                            className="border border-success px-3 py-2 font-mono text-xs text-success transition hover:bg-success/10 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {actionedMessageIds.has(message.id)
+                              ? "Request submitted"
+                              : isBookingActionLoading
+                                ? "Creating request..."
+                                : "Approve and create request"}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setActionedMessageIds((prev) => new Set(prev).add(message.id));
+                              appendAssistantMessage(
+                                "Understood. I did not create the booking request.",
+                              );
+                            }}
+                            disabled={isBookingActionLoading || actionedMessageIds.has(message.id)}
+                            className="border border-danger px-3 py-2 font-mono text-xs text-danger transition hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Decline
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -951,7 +985,7 @@ function HomePage() {
                               return (
                                 <button
                                   key={`${message.id}-slot-${index}`}
-                                  onClick={() => createBookingFromSlot(slot)}
+                                  onClick={() => createBookingFromSlot(slot, message.id)}
                                   disabled={isBookingActionLoading}
                                   className="border border-accent px-3 py-2 font-mono text-xs text-accent transition hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-60"
                                 >

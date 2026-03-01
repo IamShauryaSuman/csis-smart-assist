@@ -1,8 +1,10 @@
 import json
+from collections import defaultdict
 from datetime import datetime, timedelta
 from functools import lru_cache
 from importlib import import_module
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 
@@ -11,6 +13,15 @@ from calender.functions import find_nearby_free_slots, is_slot_available
 from .config import Settings
 from .schemas import CalendarFlowOut, CalendarSlotOut, ChatResponseOut
 from .services import SupabaseService
+
+# ── Conversation Memory Store ──────────────────────────────────────────
+# Sliding window size (number of recent message pairs to keep verbatim)
+MEMORY_WINDOW_K = 6
+
+# Per-user memory: { user_id: { "history": [...], "summary": "..." } }
+_conversation_memory: dict[str, dict[str, Any]] = defaultdict(
+    lambda: {"history": [], "summary": ""}
+)
 
 
 @lru_cache
@@ -28,6 +39,49 @@ class ChatService:
         self.settings = settings
         self.supabase_service = supabase_service
 
+    # ── Memory helpers ─────────────────────────────────────────────────
+    def _get_memory(self, user_id: str) -> dict[str, Any]:
+        return _conversation_memory[user_id]
+
+    def _append_turn(self, user_id: str, user_msg: str, assistant_msg: str) -> None:
+        """Append a (user, assistant) turn and compress when window overflows."""
+        mem = self._get_memory(user_id)
+        mem["history"].append({"user": user_msg, "assistant": assistant_msg})
+
+        # If history exceeds window, summarize overflow turns
+        if len(mem["history"]) > MEMORY_WINDOW_K:
+            overflow = mem["history"][:-MEMORY_WINDOW_K]
+            mem["history"] = mem["history"][-MEMORY_WINDOW_K:]
+
+            # Build text of overflowing turns
+            overflow_text = "\n".join(
+                f"User: {t['user']}\nAssistant: {t['assistant']}" for t in overflow
+            )
+            existing_summary = mem["summary"]
+            summary_prompt = (
+                "You are a summarizer. Merge the existing conversation summary with the new exchanges below "
+                "into a single concise paragraph that preserves all important facts, preferences, and decisions.\n\n"
+                f"Existing summary:\n{existing_summary or '(none)'}\n\n"
+                f"New exchanges:\n{overflow_text}\n\n"
+                "Updated summary:"
+            )
+            new_summary = self._generate_answer(summary_prompt)
+            if new_summary and not new_summary.startswith("__"):
+                mem["summary"] = new_summary
+
+    def _build_memory_context(self, user_id: str) -> str:
+        """Build a formatted memory block for the LLM prompt."""
+        mem = self._get_memory(user_id)
+        parts = []
+        if mem["summary"]:
+            parts.append(f"Conversation Summary (older context):\n{mem['summary']}")
+        if mem["history"]:
+            recent = "\n".join(
+                f"User: {t['user']}\nAssistant: {t['assistant']}" for t in mem["history"]
+            )
+            parts.append(f"Recent conversation (last {len(mem['history'])} turns):\n{recent}")
+        return "\n---\n".join(parts) if parts else ""
+
     def answer_query(self, query: str, user_id: str) -> ChatResponseOut:
         try:
             decision = self._decide_intent(query=query)
@@ -44,35 +98,52 @@ class ChatService:
                 status_code=500, detail=f"Chat processing failed: {exc}") from exc
 
     def _handle_info_query(self, query: str, user_id: str) -> ChatResponseOut:
-        rag_rows: list[dict[str, Any]] = []
-        embed_model = get_embed_model()
-        if embed_model is not None:
-            try:
-                embedding = embed_model.encode([f"query: {query}"])[0].tolist()
-                rag_rows = self.supabase_service.search_rag_chunks_from_embedding(
-                    embedding=embedding,
-                    match_count=5,
-                )
-            except Exception:
-                rag_rows = []
+        # Use local ChromaDB for RAG retrieval instead of Supabase
+        rag_chunks: list[str] = []
+        sources: list[dict] = []
 
-        if not rag_rows:
-            rag_rows = self.supabase_service.search_rag_chunks_by_text(
-                query=query,
-                match_count=5,
-            )
+        try:
+            import chromadb
+            client = chromadb.PersistentClient(path="./RAG_db")
+            collection = client.get_or_create_collection(name="RAG_db")
 
-        context = "\n".join(row.get("content", "")
-                            for row in rag_rows if row.get("content"))
+            if collection.count() > 0:
+                embed_model = get_embed_model()
+                if embed_model is not None:
+                    query_embedding = embed_model.encode([query]).tolist()
+                    results = collection.query(
+                        query_embeddings=query_embedding,
+                        n_results=5,
+                    )
+                    if results and "documents" in results and results["documents"]:
+                        rag_chunks = results["documents"][0]
+                        # Build source info from ChromaDB results
+                        for i, doc in enumerate(rag_chunks):
+                            sources.append({
+                                "document_id": results["ids"][0][i] if results.get("ids") else None,
+                                "chunk_index": i,
+                                "similarity": round(1 - (results["distances"][0][i] if results.get("distances") else 0), 4),
+                            })
+        except Exception as exc:
+            print(f"[ChromaDB] retrieval error: {exc}")
+            rag_chunks = []
+
+        context = "\n".join(rag_chunks) if rag_chunks else "No relevant documents found."
+
+        # Build conversation memory context
+        memory_context = self._build_memory_context(user_id)
+        memory_block = f"\nConversation Memory:\n---\n{memory_context}\n---\n" if memory_context else ""
 
         prompt = f"""
-You are CSIS SmartAssist. Answer the user query using the context below.
+You are CSIS SmartAssist. Answer the user query using the document context and conversation memory below.
 If context is insufficient, give a helpful next step and do not mention internal system details.
 If the user asks for a form, provide the exact form/link if present in context; otherwise tell them who to contact.
+If your answer contains or references a link from the context, ALWAYS include the link in your response and format it cleanly as a Markdown link.
+Use conversation memory to maintain continuity — reference earlier topics if relevant.
 
 User ID: {user_id}
-
-Context:
+{memory_block}
+Document Context:
 {context}
 
 Question:
@@ -89,14 +160,10 @@ Question:
                 status_code=503,
                 detail="Language model service is currently unavailable.",
             )
-        sources = [
-            {
-                "document_id": row.get("document_id"),
-                "chunk_index": row.get("chunk_index"),
-                "similarity": row.get("similarity"),
-            }
-            for row in rag_rows
-        ]
+
+        # Save this turn to memory
+        self._append_turn(user_id, query, answer)
+
         return ChatResponseOut(answer=answer, sources=sources, intent="info_query")
 
     def _handle_availability_check(self, query: str, decision: dict[str, Any]) -> ChatResponseOut:
@@ -143,9 +210,15 @@ Question:
                 calenderID=calendar_id,
             )
             if available:
+                ist = ZoneInfo("Asia/Kolkata")
+                display_start = start_time.astimezone(ist)
+                display_date = display_start.strftime("%B %d, %Y")
+                display_time = display_start.strftime("%I:%M %p")
                 answer = (
-                    f"That slot{location_text} is available. Start: {start_time.isoformat()}, "
-                    f"duration: {duration_minutes} minutes. Do you want me to create the booking request?"
+                    f"That slot{location_text} is available. "
+                    f"Date: {display_date}, Start: {display_time} IST, "
+                    f"Duration: {duration_minutes} minutes. "
+                    f"Do you want me to create the booking request?"
                 )
                 return ChatResponseOut(
                     answer=answer,
@@ -167,6 +240,7 @@ Question:
                 window_hours=3,
                 step_minutes=duration_minutes,
             )
+            ist = ZoneInfo("Asia/Kolkata")
             nearby_slots = [
                 CalendarSlotOut(
                     start_iso=slot_start.isoformat(),
@@ -179,12 +253,13 @@ Question:
 
             if nearby_slots:
                 options = ", ".join(
-                    f"{slot_item.start_iso} to {slot_item.end_iso}"
-                    for slot_item in nearby_slots
+                    f"{datetime.fromisoformat(s.start_iso).astimezone(ist).strftime('%b %d %I:%M %p')} - "
+                    f"{datetime.fromisoformat(s.end_iso).astimezone(ist).strftime('%I:%M %p')} IST"
+                    for s in nearby_slots
                 )
                 answer = (
                     f"That slot{location_text} is not available. "
-                    f"Nearby options: {options}."
+                    f"Here are some nearby options: {options}."
                 )
             else:
                 answer = (
@@ -204,48 +279,16 @@ Question:
                 ),
             )
 
-        now = datetime.utcnow().isoformat() + "+00:00"
-        start_time = parse_start_iso(now)
-        nearby = find_nearby_free_slots(
-            start_time=start_time,
-            per=duration_minutes,
-            service=service,
-            calendarID=calendar_id,
-            window_hours=3,
-            step_minutes=duration_minutes,
+        # Date/time is missing — ask the user to provide it
+        answer = (
+            f"To book{location_text}, I need a few details:\n"
+            f"1. **Date** (e.g. March 5, tomorrow)\n"
+            f"2. **Time** (e.g. 3:00 PM to 5:00 PM)\n"
+            f"3. **Purpose** (e.g. Extra Tutorial, Lab session)\n\n"
+            f"Please provide these so I can check availability."
         )
-        if nearby:
-            options = ", ".join(
-                f"{slot_start.isoformat()} to {slot_end.isoformat()}"
-                for slot_start, slot_end in nearby[:5]
-            )
-            return ChatResponseOut(
-                answer=(
-                    f"I could not detect an exact date/time in your message{location_text}. "
-                    f"Nearby available slots: {options}."
-                ),
-                sources=[],
-                intent="calendar_query",
-                calendar_flow=CalendarFlowOut(
-                    status="missing_datetime",
-                    requested_slot=None,
-                    nearby_slots=[
-                        CalendarSlotOut(
-                            start_iso=slot_start.isoformat(),
-                            end_iso=slot_end.isoformat(),
-                            duration_minutes=duration_minutes,
-                            resource=location or None,
-                        )
-                        for slot_start, slot_end in nearby[:5]
-                    ],
-                    requires_user_approval=False,
-                ),
-            )
         return ChatResponseOut(
-            answer=(
-                f"I could not detect an exact date/time in your message{location_text}, "
-                "and I could not find nearby free slots."
-            ),
+            answer=answer,
             sources=[],
             intent="calendar_query",
             calendar_flow=CalendarFlowOut(
@@ -270,18 +313,29 @@ Question:
                 }
             return {"intent": "info_query"}
 
+        now = datetime.now(ZoneInfo("Asia/Kolkata"))
+        current_date_str = now.strftime("%Y-%m-%d")
+        current_time_str = now.strftime("%H:%M:%S")
+        tomorrow_date_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+
         prompt = f"""
 Classify the user message into exactly one intent:
 - info_query
 - calendar_query
 
+Current date: {current_date_str}
+Current time: {current_time_str}
+Timezone: Asia/Kolkata (+05:30)
+Tomorrow's date: {tomorrow_date_str}
+
 Return strict JSON only with this shape:
 {{
   "intent": "info_query|calendar_query",
   "slot": {{
-    "start_iso": "ISO8601 datetime with timezone offset or null",
+    "start_iso": "ISO8601 datetime with timezone offset +05:30, or null",
         "duration_minutes": 60,
-        "location": "specific room/lab name from user message, or null"
+        "location": "specific room/lab name from user message, or null",
+        "purpose": "booking purpose from user message, or null"
   }}
 }}
 
@@ -290,7 +344,10 @@ Rules:
 - Use info_query for all informational questions.
 - If date/time is missing, keep slot.start_iso as null.
 - If duration is missing, use 60.
-- Extract slot.location when user mentions a specific room/lab (for example: "Lab 3", "Room A-201").
+- Resolve relative dates like "tomorrow" using the current date above.
+- Always use timezone offset +05:30 for Asia/Kolkata.
+- Extract slot.location when user mentions a specific room/lab (for example: "Lab 3", "Room A-201", "A603").
+- Extract slot.purpose when user mentions a reason (for example: "Extra Tutorial", "Lab session", "Meeting").
 
 User message:
 {query}
