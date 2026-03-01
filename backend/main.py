@@ -42,8 +42,8 @@ settings = get_settings()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -304,17 +304,15 @@ def decide_booking_request(
             email_receiver="f20240521@goa.bits-pilani.ac.in",
             subject=f"[CSIS SmartAssist] Booking request {decision_word}",
             body=(
-            "CSIS SmartAssist booking request has been confirmed.\n\n"
-            f"Request ID: {updated_booking['id']}\n"
-            f"Status: {decision_word}\n"
-            f"Location: {updated_booking['location']}\n"
-            f"Date: {updated_booking['date']}\n"
-            f"Time slot: {updated_booking['time_slot']}\n"
-            f"Remarks: {payload.remarks or '-'}\n"
-        ),
+                "CSIS SmartAssist booking request has been confirmed.\n\n"
+                f"Request ID: {updated_booking['id']}\n"
+                f"Status: {decision_word}\n"
+                f"Location: {updated_booking['location']}\n"
+                f"Date: {updated_booking['date']}\n"
+                f"Time slot: {updated_booking['time_slot']}\n"
+                f"Remarks: {payload.remarks or '-'}\n"
+            ),
         )
-        
-        
 
     if calendar_event_link:
         updated_booking["calendar_event_link"] = calendar_event_link
