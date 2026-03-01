@@ -32,3 +32,18 @@ Open `http://localhost:3000`.
 npm run lint
 npm run build
 ```
+
+## Deploy frontend to Vercel
+
+1. Import this repository into Vercel.
+2. Set **Root Directory** to `frontend`.
+3. Keep framework preset as **Next.js**.
+4. Configure production environment variables in Vercel:
+   - `NEXT_PUBLIC_BACKEND_URL` = your Render backend URL (for example: `https://your-backend.onrender.com`)
+   - `GOOGLE_CLIENT_ID`
+   - `GOOGLE_CLIENT_SECRET`
+   - `NEXTAUTH_SECRET`
+   - `NEXTAUTH_URL` = your Vercel app URL (for example: `https://your-app.vercel.app`)
+5. Deploy.
+
+After deployment, set backend `FRONTEND_ORIGIN` on Render to your Vercel app URL.
