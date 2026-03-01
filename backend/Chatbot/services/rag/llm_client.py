@@ -12,6 +12,7 @@ def generate_answer(query: str, relevant_chunks: list, memory_context: list = No
     prompt_template = f"""
 Answer the question based only on the provided context and the chat history. 
 If you cannot answer the question from the context, say "I'm sorry, I don't know based on the provided documents".
+If your answer contains or references a link from the context, ALWAYS include the link in your response and format it cleanly as a Markdown link.
 
 Context Documents:
 ---

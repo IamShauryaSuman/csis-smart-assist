@@ -96,6 +96,11 @@ def extract_text(file_content: bytes, mime_type: str) -> str:
                 text += para.text + "\n"
         elif 'html' in mime_type:
             soup = BeautifulSoup(file_content, 'html.parser')
+            for a in soup.find_all('a', href=True):
+                link_text = a.get_text(strip=True)
+                href = a['href']
+                if link_text and href and not href.startswith('#') and not href.startswith('javascript:'):
+                    a.replace_with(f"{link_text} (URL: {href})")
             text = soup.get_text(separator=' ', strip=True)
         else:
             # Fallback for plain text or mock
