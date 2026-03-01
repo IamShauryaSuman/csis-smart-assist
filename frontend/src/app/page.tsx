@@ -18,7 +18,7 @@ type CalendarSlot = {
   start_iso: string;
   end_iso: string;
   duration_minutes: number;
-  resource?: string | null;
+  location?: string | null;
 };
 
 type CalendarFlow = {
@@ -35,23 +35,13 @@ interface ChatSession {
   messages: Message[];
 }
 
-type Slot = {
-  id: string;
-  resource: string;
-  date: string;
-  time: string;
-  status: "available" | "limited" | "unavailable";
-  alternates?: string[];
-};
-
 type BookingRequest = {
   id: string;
-  requester: string;
-  resource: string;
+  email: string;
+  location: string;
   date: string;
   time: string;
   purpose: string;
-  participants: number;
   remarks: string;
   status: "pending" | "accepted" | "declined";
 };
@@ -59,11 +49,10 @@ type BookingRequest = {
 type BackendBookingRequest = {
   id: string;
   requester_user_id: string;
-  resource: string;
+  location: string;
   date: string;
   time_slot: string;
   purpose: string;
-  participants: number;
   remarks: string | null;
   status: "pending" | "accepted" | "declined";
 };
@@ -80,98 +69,9 @@ type SyncedUserPayload = {
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 
-const initialSlots: Slot[] = [
-  {
-    id: "LIB-A-1000",
-    resource: "Library A",
-    date: "2026-03-02",
-    time: "10:00-11:00",
-    status: "available",
-  },
-  {
-    id: "LIB-A-1100",
-    resource: "Library A",
-    date: "2026-03-02",
-    time: "11:00-12:00",
-    status: "unavailable",
-    alternates: ["12:00-13:00", "15:00-16:00"],
-  },
-  {
-    id: "LAB-2-1000",
-    resource: "Lab 2",
-    date: "2026-03-02",
-    time: "10:00-11:00",
-    status: "limited",
-    alternates: ["13:00-14:00"],
-  },
-  {
-    id: "CONF-C-1400",
-    resource: "Conference C",
-    date: "2026-03-02",
-    time: "14:00-15:00",
-    status: "available",
-  },
-];
 
 const initialBookingRequests: BookingRequest[] = [];
 
-const welcomeMessage: Message = {
-  id: "1",
-  role: "assistant",
-  content: "Hi! Ask policy questions or request a room booking.",
-  citations: [
-    {
-      name: "CampusBookingPolicy_v3.pdf",
-      link: "#",
-      excerpt:
-        "Room booking requests must include purpose, participants, and preferred time slot.",
-    },
-  ],
-};
-
-const initialChatSessions: ChatSession[] = [
-  {
-    id: "chat-1",
-    title: "Campus booking policy guidance",
-    updatedAt: "2026-02-28T10:00:00.000Z",
-    messages: [
-      welcomeMessage,
-      {
-        id: "2",
-        role: "user",
-        content: "What details are mandatory to request a room booking?",
-      },
-      {
-        id: "3",
-        role: "assistant",
-        content:
-          "You must include purpose, participant count, and preferred slot. I can help draft that request.",
-      },
-    ],
-  },
-  {
-    id: "chat-2",
-    title: "Lab 2 slot alternatives",
-    updatedAt: "2026-02-27T16:45:00.000Z",
-    messages: [
-      {
-        ...welcomeMessage,
-        id: "4",
-      },
-      {
-        id: "5",
-        role: "user",
-        content: "Lab 2 at 10:00 is limited. Suggest alternate slots.",
-      },
-      {
-        id: "6",
-        role: "assistant",
-        content:
-          "Lab 2 has a likely alternate at 13:00-14:00. I can prepare a fallback request for that slot.",
-      },
-    ],
-  },
-];
 
 const formatHistoryTime = (isoDate: string) => {
   const value = new Date(isoDate);
@@ -202,20 +102,19 @@ function HomePage() {
   const isAdmin = userRoles.includes("admin");
 
   const [chatSessions, setChatSessions] =
-    useState<ChatSession[]>(initialChatSessions);
-  const [activeChatId, setActiveChatId] = useState(initialChatSessions[0].id);
+    useState<ChatSession[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [bookingRequests, setBookingRequests] = useState<BookingRequest[]>(
     initialBookingRequests,
   );
-  const [slots, setSlots] = useState<Slot[]>(initialSlots);
 
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isSessionsLoading, setIsSessionsLoading] = useState(false);
   const [isBookingActionLoading, setIsBookingActionLoading] = useState(false);
   const [actionedMessageIds, setActionedMessageIds] = useState<Set<string>>(new Set());
   const [bookingPurposes, setBookingPurposes] = useState<Record<string, string>>({});
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [isAvailabilityOpen, setIsAvailabilityOpen] = useState(false);
 
   const sortedChatSessions = [...chatSessions].sort(
     (left, right) =>
@@ -225,11 +124,11 @@ function HomePage() {
   const activeChat = useMemo(
     () =>
       chatSessions.find((chatSession) => chatSession.id === activeChatId) ??
-      chatSessions[0],
+      chatSessions[0] ?? null,
     [activeChatId, chatSessions],
   );
 
-  const messages = activeChat?.messages;
+  const messages = activeChat?.messages ?? [];
 
   const toBookingSlotPayload = (slot: CalendarSlot) => {
     const start = new Date(slot.start_iso);
@@ -295,11 +194,10 @@ function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requester_user_id: requesterId,
-          resource: slot.resource || "Calendar Room",
+          location: slot.location || "Calendar Room",
           date: bookingSlot.date,
           time_slot: bookingSlot.time_slot,
           purpose: purpose,
-          participants: 1,
           remarks: "Created via SmartAssist chatbot",
         }),
       });
@@ -330,13 +228,13 @@ function HomePage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeChat?.id, messages?.length, isLoading]);
 
+  // Sync user roles
   useEffect(() => {
     if (!session?.user?.email) {
       setUserRoles([]);
       setSyncedUserId(null);
       return;
     }
-
     const syncSessionUser = async () => {
       try {
         const response = await fetch(`${backendUrl}/users/sync-session`, {
@@ -347,11 +245,7 @@ function HomePage() {
             full_name: session.user?.name,
           }),
         });
-
-        if (!response.ok) {
-          throw new Error("Failed to sync user");
-        }
-
+        if (!response.ok) throw new Error("Failed to sync user");
         const payload = (await response.json()) as SyncedUserPayload;
         setSyncedUserId(payload.user?.id ?? null);
         setUserRoles(payload.roles ?? []);
@@ -360,9 +254,105 @@ function HomePage() {
         setUserRoles([]);
       }
     };
-
     syncSessionUser();
   }, [session]);
+
+  // Load chat sessions from backend
+  useEffect(() => {
+    if (!session?.user?.email) return;
+
+    const loadSessions = async () => {
+      setIsSessionsLoading(true);
+      try {
+        const response = await fetch(
+          `${backendUrl}/chat/sessions?email=${encodeURIComponent(session.user!.email!)}`,
+        );
+        if (!response.ok) return;
+        const data = (await response.json()) as {
+          id: string;
+          title: string;
+          updated_at: string;
+        }[];
+        const loaded: ChatSession[] = data.map((s) => ({
+          id: s.id,
+          title: s.title,
+          updatedAt: s.updated_at,
+          messages: [],
+        }));
+        setChatSessions(loaded);
+        if (loaded.length > 0) {
+          setActiveChatId(loaded[0].id);
+        } else {
+          // Auto-create first session for new users
+          const createRes = await fetch(`${backendUrl}/chat/sessions`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_email: session.user!.email,
+              title: "New chat",
+            }),
+          });
+          if (createRes.ok) {
+            const created = (await createRes.json()) as {
+              id: string;
+              title: string;
+              updated_at: string;
+            };
+            const newChat: ChatSession = {
+              id: created.id,
+              title: created.title,
+              updatedAt: created.updated_at,
+              messages: [],
+            };
+            setChatSessions([newChat]);
+            setActiveChatId(newChat.id);
+          }
+        }
+      } catch { }
+      finally {
+        setIsSessionsLoading(false);
+      }
+    };
+
+    loadSessions();
+  }, [session]);
+
+  // Load messages when active session changes
+  useEffect(() => {
+    if (!activeChatId) return;
+    // Skip if messages are already loaded for this session
+    const current = chatSessions.find((s) => s.id === activeChatId);
+    if (current && current.messages.length > 0) return;
+
+    const loadMessages = async () => {
+      try {
+        const response = await fetch(
+          `${backendUrl}/chat/sessions/${activeChatId}/messages`,
+        );
+        if (!response.ok) return;
+        const data = (await response.json()) as {
+          id: string;
+          role: "user" | "assistant";
+          content: string;
+          metadata: Record<string, unknown>;
+        }[];
+        const msgs: Message[] = data.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          calendarFlow: (m.metadata?.calendar_flow as CalendarFlow) ?? undefined,
+          citations: [],
+        }));
+        setChatSessions((prev) =>
+          prev.map((s) =>
+            s.id === activeChatId ? { ...s, messages: msgs } : s,
+          ),
+        );
+      } catch { }
+    };
+
+    loadMessages();
+  }, [activeChatId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!session || !isAdmin) return;
@@ -375,12 +365,11 @@ function HomePage() {
         setBookingRequests(
           data.map((request) => ({
             id: request.id,
-            requester: request.requester_user_id,
-            resource: request.resource,
+            email: request.requester_user_id,
+            location: request.location,
             date: request.date,
             time: request.time_slot,
             purpose: request.purpose,
-            participants: request.participants,
             remarks: request.remarks ?? "",
             status: request.status,
           })),
@@ -391,74 +380,37 @@ function HomePage() {
     loadRequests();
   }, [isAdmin, session]);
 
-  useEffect(() => {
-    if (!session || isAdmin) return;
+  const createNewChat = async () => {
+    if (isLoading || !session?.user?.email) return;
 
-    const loadNearbySlots = async () => {
-      try {
-        const now = new Date();
-        const response = await fetch(`${backendUrl}/calendar/nearby-slots`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            start_iso: now.toISOString(),
-            duration_minutes: 60,
-            window_hours: 3,
-          }),
-        });
+    try {
+      const response = await fetch(`${backendUrl}/chat/sessions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_email: session.user.email,
+          title: "New chat",
+        }),
+      });
 
-        if (!response.ok) return;
-        const payload = (await response.json()) as {
-          free_slots?: { start_iso: string; end_iso: string }[];
-        };
-        if (!payload.free_slots || payload.free_slots.length === 0) return;
+      if (!response.ok) return;
+      const created = (await response.json()) as {
+        id: string;
+        title: string;
+        updated_at: string;
+      };
 
-        const mappedSlots: Slot[] = payload.free_slots
-          .slice(0, 6)
-          .map((slot, index) => {
-            const start = new Date(slot.start_iso);
-            const end = new Date(slot.end_iso);
-            return {
-              id: `CAL-${index}`,
-              resource: "Calendar Room",
-              date: start.toISOString().split("T")[0],
-              time: `${start.toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}-${end.toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}`,
-              status: "available",
-            };
-          });
+      const newChat: ChatSession = {
+        id: created.id,
+        title: created.title,
+        updatedAt: created.updated_at,
+        messages: [],
+      };
 
-        setSlots(mappedSlots);
-      } catch { }
-    };
-
-    loadNearbySlots();
-  }, [isAdmin, session]);
-
-  const createNewChat = () => {
-    if (isLoading) return;
-
-    const now = new Date().toISOString();
-    const newChat: ChatSession = {
-      id: `chat-${Date.now()}`,
-      title: "New chat",
-      updatedAt: now,
-      messages: [
-        {
-          ...welcomeMessage,
-          id: `${Date.now()}-welcome`,
-        },
-      ],
-    };
-
-    setChatSessions((previous) => [newChat, ...previous]);
-    setActiveChatId(newChat.id);
-    setInput("");
+      setChatSessions((previous) => [newChat, ...previous]);
+      setActiveChatId(newChat.id);
+      setInput("");
+    } catch { }
   };
 
   const handleSendMessage = (event: FormEvent) => {
@@ -504,6 +456,7 @@ function HomePage() {
           body: JSON.stringify({
             query: userInput,
             user_id: session?.user?.email ?? "anonymous",
+            session_id: currentChatId,
           }),
         });
 
@@ -574,11 +527,6 @@ function HomePage() {
     })();
   };
 
-  const slotStatusColor = (slotStatus: Slot["status"]) => {
-    if (slotStatus === "available") return "text-success";
-    if (slotStatus === "limited") return "text-pending";
-    return "text-danger";
-  };
 
   const requestStatusColor = (requestStatus: BookingRequest["status"]) => {
     if (requestStatus === "accepted") return "text-success";
@@ -720,15 +668,15 @@ function HomePage() {
                 <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
                   <p>
                     <span className="font-mono text-text-secondary">
-                      Requester:
+                      Email:
                     </span>{" "}
-                    {request.requester}
+                    {request.email}
                   </p>
                   <p>
                     <span className="font-mono text-text-secondary">
-                      Resource:
+                      Location:
                     </span>{" "}
-                    {request.resource}
+                    {request.location}
                   </p>
                   <p>
                     <span className="font-mono text-text-secondary">Date:</span>{" "}
@@ -737,12 +685,6 @@ function HomePage() {
                   <p>
                     <span className="font-mono text-text-secondary">Time:</span>{" "}
                     {request.time}
-                  </p>
-                  <p>
-                    <span className="font-mono text-text-secondary">
-                      Participants:
-                    </span>{" "}
-                    {request.participants}
                   </p>
                   <p>
                     <span className="font-mono text-text-secondary">
@@ -841,7 +783,7 @@ function HomePage() {
             </div>
           </aside>
 
-          <section className="flex min-h-[55vh] flex-col border-b border-border lg:col-span-6 lg:min-h-0 lg:overflow-hidden lg:border-b-0 lg:border-r">
+          <section className="flex min-h-[55vh] flex-col border-b border-border lg:col-span-9 lg:min-h-0 lg:overflow-hidden lg:border-b-0 lg:border-r">
             <div className="flex items-center justify-between border-b border-border bg-bg-surface px-4 py-2 font-mono text-sm text-text-secondary md:px-6">
               <span>Chat</span>
               <div className="flex items-center gap-2 lg:hidden">
@@ -852,14 +794,6 @@ function HomePage() {
                   aria-controls="history-sidebar"
                 >
                   {isHistoryOpen ? "Hide History" : "Show History"}
-                </button>
-                <button
-                  onClick={() => setIsAvailabilityOpen((previous) => !previous)}
-                  className="border border-border px-2 py-1 text-[11px] text-text-primary transition hover:bg-bg-base"
-                  aria-expanded={isAvailabilityOpen}
-                  aria-controls="availability-sidebar"
-                >
-                  {isAvailabilityOpen ? "Hide Info" : "Show Info"}
                 </button>
               </div>
             </div>
@@ -1042,47 +976,6 @@ function HomePage() {
             </div>
           </section>
 
-          <section
-            id="availability-sidebar"
-            className={`${isAvailabilityOpen ? "flex" : "hidden"} min-h-0 flex-col overflow-hidden lg:col-span-3 lg:flex`}
-          >
-            <div className="border-b border-border bg-bg-surface px-4 py-2 font-mono text-sm text-text-secondary">
-              Availability
-            </div>
-
-            <div className="ui-scrollbar min-h-0 flex-1 overflow-y-auto border-b border-border px-4 py-3">
-              <p className="mb-2 font-mono text-sm text-text-secondary">
-                Current slot availability
-              </p>
-              <div className="grid grid-cols-[1.3fr_1fr_1fr] gap-1 font-mono text-[11px] sm:text-xs">
-                <div className="border border-border bg-bg-surface px-2 py-1 text-text-secondary">
-                  RESOURCE
-                </div>
-                <div className="border border-border bg-bg-surface px-2 py-1 text-text-secondary">
-                  TIME
-                </div>
-                <div className="border border-border bg-bg-surface px-2 py-1 text-text-secondary">
-                  STATE
-                </div>
-
-                {slots.map((slot) => (
-                  <div key={slot.id} className="contents">
-                    <span className="border border-border px-2 py-1 text-left text-text-primary">
-                      {slot.resource}
-                    </span>
-                    <span className="border border-border px-2 py-1 text-left text-text-primary">
-                      {slot.time}
-                    </span>
-                    <span
-                      className={`border border-border px-2 py-1 text-left uppercase hover:bg-bg-surface ${slotStatusColor(slot.status)}`}
-                    >
-                      {slot.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
         </main>
       )}
     </div>

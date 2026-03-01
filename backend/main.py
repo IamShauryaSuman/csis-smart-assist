@@ -19,8 +19,10 @@ from app.schemas import (
     BookingStatus,
     CalendarAvailabilityIn,
     CalendarNearbyIn,
+    ChatMessageCreateIn,
     ChatRequestIn,
     ChatResponseOut,
+    ChatSessionCreateIn,
     RagChunkCreateIn,
     RagDocumentCreateIn,
     RagSearchIn,
@@ -226,11 +228,10 @@ def create_booking_request(
             "A new booking request has been created.\n\n"
             f"Request ID: {booking['id']}\n"
             f"Requester: {requester_label}\n"
-            f"Resource: {booking['resource']}\n"
+            f"Location: {booking['location']}\n"
             f"Date: {booking['date']}\n"
             f"Time slot: {booking['time_slot']}\n"
             f"Purpose: {booking['purpose']}\n"
-            f"Participants: {booking['participants']}\n"
             f"Acceept here: WEBSITE LINK"
         ),
     )
@@ -266,14 +267,13 @@ def decide_booking_request(
             calendarID=calendar_id,
             start_time=start_time,
             end_time=end_time,
-            title=f"Booking: {current_booking['resource']}",
+            title=f"Booking: {current_booking['location']}",
             description=(
                 f"Request ID: {current_booking['id']}\n"
                 f"Purpose: {current_booking['purpose']}\n"
-                f"Participants: {current_booking['participants']}\n"
                 f"Remarks: {payload.remarks or current_booking.get('remarks') or '-'}"
             ),
-            location=current_booking["resource"],
+            location=current_booking["location"],
         )
         calendar_event_link = calendar_event.get("htmlLink")
 
@@ -287,7 +287,7 @@ def decide_booking_request(
             "Your CSIS SmartAssist booking request has been reviewed.\n\n"
             f"Request ID: {updated_booking['id']}\n"
             f"Status: {decision_word}\n"
-            f"Resource: {updated_booking['resource']}\n"
+            f"Location: {updated_booking['location']}\n"
             f"Date: {updated_booking['date']}\n"
             f"Time slot: {updated_booking['time_slot']}\n"
             f"Remarks: {payload.remarks or '-'}\n"
@@ -307,7 +307,7 @@ def decide_booking_request(
             "CSIS SmartAssist booking request has been confirmed.\n\n"
             f"Request ID: {updated_booking['id']}\n"
             f"Status: {decision_word}\n"
-            f"Resource: {updated_booking['resource']}\n"
+            f"Location: {updated_booking['location']}\n"
             f"Date: {updated_booking['date']}\n"
             f"Time slot: {updated_booking['time_slot']}\n"
             f"Remarks: {payload.remarks or '-'}\n"
@@ -361,8 +361,83 @@ def ingest_local_rag_data(
 def chat(
     payload: ChatRequestIn,
     service: ChatService = Depends(get_chat_service),
+    supa_service: SupabaseService = Depends(get_supabase_service),
 ) -> ChatResponseOut:
-    return service.answer_query(query=payload.query, user_id=payload.user_id)
+    result = service.answer_query(query=payload.query, user_id=payload.user_id)
+
+    # Auto-persist messages if session_id is provided
+    if payload.session_id:
+        try:
+            supa_service.add_chat_message(
+                session_id=payload.session_id,
+                role="user",
+                content=payload.query,
+            )
+            # Save assistant response with metadata
+            msg_meta = {"intent": result.intent}
+            if result.calendar_flow:
+                msg_meta["calendar_flow"] = result.calendar_flow.model_dump()
+            if result.sources:
+                msg_meta["sources"] = result.sources
+            supa_service.add_chat_message(
+                session_id=payload.session_id,
+                role="assistant",
+                content=result.answer,
+                metadata=msg_meta,
+            )
+            # Auto-set title from first user message
+            messages = supa_service.get_chat_messages(payload.session_id)
+            user_msgs = [m for m in messages if m["role"] == "user"]
+            if len(user_msgs) == 1:
+                title = payload.query[:60] or "New chat"
+                supa_service.update_session_title(payload.session_id, title)
+        except Exception as exc:
+            print(f"[Chat History] save error: {exc}")
+
+    return result
+
+
+# ── Chat history endpoints ────────────────────────────────────────────
+
+@app.get("/chat/sessions")
+def list_chat_sessions(
+    email: str = Query(...),
+    service: SupabaseService = Depends(get_supabase_service),
+) -> list[dict]:
+    return service.list_chat_sessions(user_email=email)
+
+
+@app.post("/chat/sessions")
+def create_chat_session(
+    payload: ChatSessionCreateIn,
+    service: SupabaseService = Depends(get_supabase_service),
+) -> dict:
+    return service.create_chat_session(
+        user_email=payload.user_email,
+        title=payload.title,
+    )
+
+
+@app.get("/chat/sessions/{session_id}/messages")
+def get_chat_messages(
+    session_id: str,
+    service: SupabaseService = Depends(get_supabase_service),
+) -> list[dict]:
+    return service.get_chat_messages(session_id=session_id)
+
+
+@app.post("/chat/sessions/{session_id}/messages")
+def add_chat_message(
+    session_id: str,
+    payload: ChatMessageCreateIn,
+    service: SupabaseService = Depends(get_supabase_service),
+) -> dict:
+    return service.add_chat_message(
+        session_id=session_id,
+        role=payload.role,
+        content=payload.content,
+        metadata=payload.metadata,
+    )
 
 
 @app.post("/calendar/availability")

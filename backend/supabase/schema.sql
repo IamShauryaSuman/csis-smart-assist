@@ -28,12 +28,11 @@ on conflict (name) do nothing;
 
 create table if not exists public.booking_requests (
   id uuid primary key default gen_random_uuid(),
-  requester_user_id uuid not null references public.app_users(id) on delete cascade,
-  resource text not null,
+  requester_user_id uuid not null references public.app_users(id),
+  location text not null,
   date date not null,
   time_slot text not null,
   purpose text not null,
-  participants integer not null check (participants > 0),
   remarks text,
   status text not null default 'pending' check (status in ('pending', 'accepted', 'declined')),
   reviewed_by uuid references public.app_users(id) on delete set null,
@@ -92,3 +91,25 @@ as $$
   order by rag_chunks.embedding <=> query_embedding
   limit match_count;
 $$;
+
+-- ── Chat history ──────────────────────────────────────────────────────
+create table if not exists public.chat_sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_email text not null,
+  title text not null default 'New chat',
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create index if not exists chat_sessions_user_email_idx on public.chat_sessions(user_email);
+
+create table if not exists public.chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null references public.chat_sessions(id) on delete cascade,
+  role text not null check (role in ('user', 'assistant')),
+  content text not null,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create index if not exists chat_messages_session_idx on public.chat_messages(session_id);

@@ -201,7 +201,7 @@ Question:
                 end_iso=(start_time +
                          timedelta(minutes=duration_minutes)).isoformat(),
                 duration_minutes=duration_minutes,
-                resource=location or None,
+                location=location or None,
             )
             available = is_slot_available(
                 start_time=start_time,
@@ -246,7 +246,7 @@ Question:
                     start_iso=slot_start.isoformat(),
                     end_iso=slot_end.isoformat(),
                     duration_minutes=duration_minutes,
-                    resource=location or None,
+                    location=location or None,
                 )
                 for slot_start, slot_end in nearby[:5]
             ]

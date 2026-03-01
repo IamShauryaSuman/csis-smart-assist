@@ -23,13 +23,12 @@ class RoleAssignmentIn(BaseModel):
 
 
 class BookingRequestCreateIn(BaseModel):
-    requester_user_id: str
-    resource: str = Field(min_length=2, max_length=100)
+    requester_user_id: UUID
+    location: str = Field(min_length=2, max_length=100)
     date: date
-    time_slot: str = Field(min_length=3, max_length=50)
-    purpose: str = Field(min_length=1, max_length=300)
-    participants: int = Field(ge=1, le=1000)
-    remarks: str | None = Field(default=None, max_length=1000)
+    time_slot: str = Field(min_length=11, max_length=11)
+    purpose: str = Field(min_length=1)
+    remarks: str | None = None
 
 
 class BookingRequestDecisionIn(BaseModel):
@@ -60,13 +59,14 @@ class RagSearchIn(BaseModel):
 class ChatRequestIn(BaseModel):
     query: str = Field(min_length=1)
     user_id: str = Field(min_length=1)
+    session_id: str | None = None
 
 
 class CalendarSlotOut(BaseModel):
     start_iso: str
     end_iso: str
     duration_minutes: int = Field(ge=15, le=240)
-    resource: str | None = None
+    location: str | None = None
 
 
 class CalendarFlowOut(BaseModel):
@@ -93,3 +93,30 @@ class CalendarNearbyIn(BaseModel):
     duration_minutes: int = Field(default=60, ge=15, le=240)
     window_hours: int = Field(default=3, ge=1, le=24)
     step_minutes: int | None = Field(default=None, ge=5, le=240)
+
+
+# ── Chat history schemas ──────────────────────────────────────────────
+
+class ChatMessageCreateIn(BaseModel):
+    content: str
+    role: Literal["user", "assistant"]
+
+
+class ChatSessionCreateIn(BaseModel):
+    user_email: str = Field(min_length=3)
+    title: str = Field(min_length=1, max_length=255)
+
+
+class ChatMessageOut(BaseModel):
+    id: UUID
+    chat_session_id: UUID
+    content: str
+    role: str
+    created_at: str
+
+
+class ChatSessionOut(BaseModel):
+    id: UUID
+    user_email: str
+    title: str
+    created_at: str

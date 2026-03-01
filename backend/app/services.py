@@ -194,11 +194,10 @@ class SupabaseService:
             .insert(
                 {
                     "requester_user_id": str(payload.requester_user_id),
-                    "resource": payload.resource,
+                    "location": payload.location,
                     "date": payload.date.isoformat(),
                     "time_slot": payload.time_slot,
                     "purpose": payload.purpose,
-                    "participants": payload.participants,
                     "remarks": payload.remarks,
                     "status": BookingStatus.pending.value,
                 }
@@ -457,3 +456,65 @@ class SupabaseService:
     @staticmethod
     def _to_vector_literal(embedding: list[float]) -> str:
         return "[" + ",".join(str(value) for value in embedding) + "]"
+
+    # ── Chat history CRUD ─────────────────────────────────────────────
+
+    def create_chat_session(self, user_email: str, title: str = "New chat") -> dict:
+        response = (
+            self.client.table("chat_sessions")
+            .insert({"user_email": user_email, "title": title})
+            .execute()
+        )
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create chat session")
+        return response.data[0]
+
+    def list_chat_sessions(self, user_email: str) -> list[dict]:
+        response = (
+            self.client.table("chat_sessions")
+            .select("*")
+            .eq("user_email", user_email)
+            .order("updated_at", desc=True)
+            .execute()
+        )
+        return response.data or []
+
+    def get_chat_messages(self, session_id: str) -> list[dict]:
+        response = (
+            self.client.table("chat_messages")
+            .select("*")
+            .eq("session_id", session_id)
+            .order("created_at", desc=False)
+            .execute()
+        )
+        return response.data or []
+
+    def add_chat_message(self, session_id: str, role: str, content: str, metadata: dict | None = None) -> dict:
+        response = (
+            self.client.table("chat_messages")
+            .insert({
+                "session_id": session_id,
+                "role": role,
+                "content": content,
+                "metadata": metadata or {},
+            })
+            .execute()
+        )
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to save message")
+        # Bump session updated_at
+        self.client.table("chat_sessions").update(
+            {"updated_at": datetime.now(UTC).isoformat()}
+        ).eq("id", session_id).execute()
+        return response.data[0]
+
+    def update_session_title(self, session_id: str, title: str) -> dict:
+        response = (
+            self.client.table("chat_sessions")
+            .update({"title": title, "updated_at": datetime.now(UTC).isoformat()})
+            .eq("id", session_id)
+            .execute()
+        )
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Chat session not found")
+        return response.data[0]
