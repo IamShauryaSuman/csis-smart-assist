@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from email.message import EmailMessage
 from uuid import UUID
 from zoneinfo import ZoneInfo
-
+from calender.functions import *
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -194,19 +194,33 @@ def create_booking_request(
 ) -> dict:
     booking = service.create_booking_request(payload)
 
-    admin_seed_emails = {
-        item.strip().lower()
-        for item in settings.admin_seed_emails.split(",")
-        if item.strip()
-    }
-    admin_emails = set(service.list_admin_emails())
-    admin_emails.update(admin_seed_emails)
+    # admin_seed_emails = {
+    #     item.strip().lower()
+    #     for item in settings.admin_seed_emails.split(",")
+    #     if item.strip()
+    # }
+    # admin_emails = set(service.list_admin_emails())
+    # admin_emails.update(admin_seed_emails)
 
     requester = service.get_user_by_id(payload.requester_user_id)
     requester_label = requester.get(
         "email") if requester else str(payload.requester_user_id)
-    _send_email_notification(
-        recipients=list(admin_emails),
+    # _send_email_notification(
+    #     recipients=list(admin_emails),
+    #     subject=f"[CSIS SmartAssist] New booking request {booking['id']}",
+    #     body=(
+    #         "A new booking request has been created.\n\n"
+    #         f"Request ID: {booking['id']}\n"
+    #         f"Requester: {requester_label}\n"
+    #         f"Resource: {booking['resource']}\n"
+    #         f"Date: {booking['date']}\n"
+    #         f"Time slot: {booking['time_slot']}\n"
+    #         f"Purpose: {booking['purpose']}\n"
+    #         f"Participants: {booking['participants']}\n"
+    #     ),
+    # )
+    send_email(
+        email_receiver="f20240521@goa.bits-pilani.ac.in",
         subject=f"[CSIS SmartAssist] New booking request {booking['id']}",
         body=(
             "A new booking request has been created.\n\n"
@@ -280,8 +294,8 @@ def decide_booking_request(
         if calendar_event_link:
             body += f"\nCalendar event: {calendar_event_link}\n"
 
-        _send_email_notification(
-            recipients=[requester["email"]],
+        send_email(
+            email_receiver=requester["email"],
             subject=f"[CSIS SmartAssist] Booking request {decision_word}",
             body=body,
         )
