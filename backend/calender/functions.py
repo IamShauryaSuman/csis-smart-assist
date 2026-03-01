@@ -1,3 +1,4 @@
+import os
 from datetime import timezone
 from datetime import timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -5,18 +6,18 @@ import smtplib
 from email.message import EmailMessage
 from dotenv import load_dotenv
 load_dotenv()
-import os
 
 ist = ZoneInfo("Asia/Kolkata")
 
-def is_slot_available(start_time, per, service,calenderID):
+
+def is_slot_available(start_time, per, service, calenderID):
     """
     Returns True if the slot is free, False if busy
-    """ 
+    """
 
     # 1. Normalize times to UTC
     start_time = start_time.astimezone(timezone.utc)
-    end_time   = start_time + timedelta(minutes=per)
+    end_time = start_time + timedelta(minutes=per)
 
     # 2. Ask Google Calendar if anything is busy in this range
     body = {
@@ -32,26 +33,26 @@ def is_slot_available(start_time, per, service,calenderID):
     # 3. Decide
     return len(busy_intervals) == 0
 
+
 def find_nearby_free_slots(
     start_time,
     per,
     service,
     calendarID,
+    window_hours=3,
     step_minutes=None
 ):
     """
     Returns a list of (slot_start, slot_end) tuples
     within ±window_hours of start_time.
     """
-    window_hours=3
-
     if step_minutes is None:
         step_minutes = per  # default: non-overlapping slots
 
     start_time = start_time.astimezone(timezone.utc)
 
     window_start = start_time - timedelta(hours=window_hours)
-    window_end   = start_time + timedelta(hours=window_hours)
+    window_end = start_time + timedelta(hours=window_hours)
 
     free_slots = []
 
@@ -66,6 +67,7 @@ def find_nearby_free_slots(
 
     return free_slots
 
+
 def print_slots(slots):
     if not slots:
         print("No available slots found.")
@@ -74,14 +76,13 @@ def print_slots(slots):
     print("Available slots:")
     for i, (start, end) in enumerate(slots, start=1):
         start_ist = start.astimezone(ist)
-        end_ist   = end.astimezone(ist)
+        end_ist = end.astimezone(ist)
 
         print(
             f"{i}. {start_ist.strftime('%d %b %Y, %I:%M %p')} "
             f"→ {end_ist.strftime('%I:%M %p')}"
         )
 
-from datetime import timezone
 
 def create_event(
     service,
@@ -99,7 +100,7 @@ def create_event(
 
     # Normalize to UTC
     start_time = start_time.astimezone(timezone.utc)
-    end_time   = end_time.astimezone(timezone.utc)
+    end_time = end_time.astimezone(timezone.utc)
 
     event = {
         "summary": title,
@@ -125,6 +126,7 @@ def create_event(
 
     return created_event
 
+
 def send_email(body, email_receiver, subject):
     EMAIL = "sapphire.csis.no.reply@gmail.com"
     APP_PASSWORD = os.getenv("APP_PASSWORD")
@@ -138,4 +140,4 @@ def send_email(body, email_receiver, subject):
         server.login(EMAIL, APP_PASSWORD)
         server.send_message(msg)
 
-    print(f"✅ Email sent to {email_receiver}")    
+    print(f"✅ Email sent to {email_receiver}")

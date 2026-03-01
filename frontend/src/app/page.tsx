@@ -3,13 +3,30 @@
 import { useSession, signIn, signOut } from "next-auth/react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   citations?: { name: string; link: string; excerpt: string }[];
+  calendarFlow?: CalendarFlow;
 }
+
+type CalendarSlot = {
+  start_iso: string;
+  end_iso: string;
+  duration_minutes: number;
+  resource?: string | null;
+};
+
+type CalendarFlow = {
+  status: "slot_available" | "slot_unavailable" | "missing_datetime";
+  requested_slot?: CalendarSlot | null;
+  nearby_slots?: CalendarSlot[];
+  requires_user_approval?: boolean;
+};
 
 interface ChatSession {
   id: string;
@@ -96,41 +113,7 @@ const initialSlots: Slot[] = [
   },
 ];
 
-const initialBookingRequests: BookingRequest[] = [
-  {
-    id: "REQ-1001",
-    requester: "Aarav Mehta",
-    resource: "Library A",
-    date: "2026-03-03",
-    time: "10:00-11:00",
-    purpose: "Project review meeting",
-    participants: 6,
-    remarks: "",
-    status: "pending",
-  },
-  {
-    id: "REQ-1002",
-    requester: "Nisha Verma",
-    resource: "Lab 2",
-    date: "2026-03-03",
-    time: "13:00-14:00",
-    purpose: "Robotics practice",
-    participants: 12,
-    remarks: "",
-    status: "pending",
-  },
-  {
-    id: "REQ-1003",
-    requester: "Rohan Singh",
-    resource: "Conference C",
-    date: "2026-03-04",
-    time: "15:00-16:00",
-    purpose: "Mentorship session",
-    participants: 8,
-    remarks: "",
-    status: "pending",
-  },
-];
+const initialBookingRequests: BookingRequest[] = [];
 
 const welcomeMessage: Message = {
   id: "1",
@@ -228,6 +211,7 @@ function HomePage() {
 
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isBookingActionLoading, setIsBookingActionLoading] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isAvailabilityOpen, setIsAvailabilityOpen] = useState(false);
 
@@ -244,6 +228,90 @@ function HomePage() {
   );
 
   const messages = activeChat?.messages;
+
+  const toBookingSlotPayload = (slot: CalendarSlot) => {
+    const start = new Date(slot.start_iso);
+    const end = new Date(slot.end_iso);
+
+    return {
+      date: start.toISOString().split("T")[0],
+      time_slot: `${start.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      })}-${end.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      })}`,
+    };
+  };
+
+  const appendAssistantMessage = (content: string) => {
+    if (!activeChat) return;
+    setChatSessions((previous) =>
+      previous.map((chatSession) => {
+        if (chatSession.id !== activeChat.id) return chatSession;
+        return {
+          ...chatSession,
+          updatedAt: new Date().toISOString(),
+          messages: [
+            ...chatSession.messages,
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content,
+            },
+          ],
+        };
+      }),
+    );
+  };
+
+  const createBookingFromSlot = async (slot: CalendarSlot) => {
+    if (!syncedUserId) {
+      appendAssistantMessage(
+        "I could not identify your synced user profile yet. Please wait a moment and try again.",
+      );
+      return;
+    }
+
+    setIsBookingActionLoading(true);
+    try {
+      const bookingSlot = toBookingSlotPayload(slot);
+      const response = await fetch(`${backendUrl}/booking-requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requester_user_id: syncedUserId,
+          resource: slot.resource || "Calendar Room",
+          date: bookingSlot.date,
+          time_slot: bookingSlot.time_slot,
+          purpose: "Booking request created via SmartAssist chatbot",
+          participants: 1,
+          remarks: "Auto-created from chat workflow",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create booking request");
+      }
+
+      const created = (await response.json()) as {
+        id?: string;
+        status?: string;
+      };
+      appendAssistantMessage(
+        `Booking request created successfully${created.id ? ` (ID: ${created.id})` : ""}. Status: ${created.status ?? "pending"}.`,
+      );
+    } catch {
+      appendAssistantMessage(
+        "I could not create the booking request right now. Please try again.",
+      );
+    } finally {
+      setIsBookingActionLoading(false);
+    }
+  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -429,11 +497,23 @@ function HomePage() {
         });
 
         if (!response.ok) {
-          throw new Error("Chat request failed");
+          let detail =
+            "Backend chat is unavailable right now. Please try again.";
+          try {
+            const errorPayload = (await response.json()) as { detail?: string };
+            if (errorPayload?.detail) {
+              detail = errorPayload.detail;
+            }
+          } catch {
+            // Keep default message
+          }
+          throw new Error(detail);
         }
 
         const payload = (await response.json()) as {
           answer: string;
+          intent: "info_query" | "calendar_query";
+          calendar_flow?: CalendarFlow;
           sources?: { document_id?: string; similarity?: number }[];
         };
 
@@ -441,6 +521,7 @@ function HomePage() {
           id: (Date.now() + 1).toString(),
           role: "assistant",
           content: payload.answer,
+          calendarFlow: payload.calendar_flow,
           citations:
             payload.sources?.slice(0, 3).map((source, index) => ({
               name: source.document_id ?? `Source ${index + 1}`,
@@ -460,11 +541,15 @@ function HomePage() {
             };
           }),
         );
-      } catch {
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : "Backend chat is unavailable right now. Please try again.";
         const fallbackResponse: Message = {
           id: (Date.now() + 1).toString(),
           role: "assistant",
-          content: "Backend chat is unavailable right now. Please try again.",
+          content: message,
         };
 
         setChatSessions((previous) =>
@@ -782,9 +867,17 @@ function HomePage() {
                   <p className="font-mono text-xs text-text-secondary md:text-sm">
                     {message.role === "user" ? "You" : "Assistant"}
                   </p>
-                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed md:text-base">
-                    {message.content}
-                  </p>
+                  {message.role === "assistant" ? (
+                    <div className="mt-1 text-sm leading-relaxed md:text-base [&_a]:text-link [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:bg-bg-surface [&_blockquote]:px-3 [&_blockquote]:py-2 [&_code]:rounded [&_code]:bg-bg-surface [&_code]:px-1 [&_code]:py-0.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_h1]:mt-2 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:mt-2 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:mt-2 [&_h3]:text-sm [&_h3]:font-semibold [&_p]:whitespace-pre-wrap [&_p]:mb-2 [&_p:last-child]:mb-0">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed md:text-base">
+                      {message.content}
+                    </p>
+                  )}
 
                   {message.citations && message.citations.length > 0 && (
                     <div className="mt-3 space-y-2 border border-border bg-bg-surface p-3">
@@ -809,6 +902,79 @@ function HomePage() {
                       ))}
                     </div>
                   )}
+
+                  {message.role === "assistant" &&
+                    message.calendarFlow?.status === "slot_available" &&
+                    message.calendarFlow.requested_slot && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          onClick={() =>
+                            createBookingFromSlot(
+                              message.calendarFlow!
+                                .requested_slot as CalendarSlot,
+                            )
+                          }
+                          disabled={isBookingActionLoading}
+                          className="border border-success px-3 py-2 font-mono text-xs text-success transition hover:bg-success/10 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isBookingActionLoading
+                            ? "Creating request..."
+                            : "Approve and create request"}
+                        </button>
+                        <button
+                          onClick={() =>
+                            appendAssistantMessage(
+                              "Understood. I did not create the booking request.",
+                            )
+                          }
+                          disabled={isBookingActionLoading}
+                          className="border border-danger px-3 py-2 font-mono text-xs text-danger transition hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Decline
+                        </button>
+                      </div>
+                    )}
+
+                  {message.role === "assistant" &&
+                    (message.calendarFlow?.status === "slot_unavailable" ||
+                      message.calendarFlow?.status === "missing_datetime") &&
+                    (message.calendarFlow?.nearby_slots?.length ?? 0) > 0 && (
+                      <div className="mt-3 space-y-2 border border-border bg-bg-surface p-3">
+                        <p className="font-mono text-xs text-text-secondary">
+                          Select a nearby free slot to create a booking request:
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {message.calendarFlow?.nearby_slots?.map(
+                            (slot, index) => {
+                              const start = new Date(slot.start_iso);
+                              const end = new Date(slot.end_iso);
+                              return (
+                                <button
+                                  key={`${message.id}-slot-${index}`}
+                                  onClick={() => createBookingFromSlot(slot)}
+                                  disabled={isBookingActionLoading}
+                                  className="border border-accent px-3 py-2 font-mono text-xs text-accent transition hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {start.toLocaleDateString([], {
+                                    month: "short",
+                                    day: "numeric",
+                                  })}{" "}
+                                  {start.toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                  {" - "}
+                                  {end.toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </button>
+                              );
+                            },
+                          )}
+                        </div>
+                      </div>
+                    )}
                 </article>
               ))}
 

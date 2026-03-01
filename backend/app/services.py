@@ -1,4 +1,6 @@
 from datetime import UTC, datetime
+import re
+from typing import Any
 from uuid import NAMESPACE_DNS, UUID, uuid5
 
 from fastapi import HTTPException
@@ -113,6 +115,66 @@ class SupabaseService:
             "roles": roles_result["roles"],
         }
 
+    def get_user_by_id(self, user_id: UUID | str) -> dict | None:
+        response = (
+            self.client.table("app_users")
+            .select("id,email,full_name")
+            .eq("id", str(user_id))
+            .limit(1)
+            .execute()
+        )
+        if not response.data:
+            return None
+        return response.data[0]
+
+    def get_booking_request_by_id(self, request_id: UUID | str) -> dict:
+        response = (
+            self.client.table("booking_requests")
+            .select("*")
+            .eq("id", str(request_id))
+            .limit(1)
+            .execute()
+        )
+        if not response.data:
+            raise HTTPException(
+                status_code=404, detail="Booking request not found")
+        return response.data[0]
+
+    def list_admin_emails(self) -> list[str]:
+        role_response = (
+            self.client.table("roles")
+            .select("id")
+            .eq("name", "admin")
+            .limit(1)
+            .execute()
+        )
+        if not role_response.data:
+            return []
+
+        admin_role_id = role_response.data[0]["id"]
+        user_roles_response = (
+            self.client.table("user_roles")
+            .select("user_id")
+            .eq("role_id", admin_role_id)
+            .execute()
+        )
+        user_ids = [row["user_id"] for row in (
+            user_roles_response.data or []) if row.get("user_id")]
+        if not user_ids:
+            return []
+
+        users_response = (
+            self.client.table("app_users")
+            .select("email")
+            .in_("id", user_ids)
+            .execute()
+        )
+        return [
+            row["email"]
+            for row in (users_response.data or [])
+            if row.get("email")
+        ]
+
     def ensure_user_roles(
         self,
         user_id: UUID,
@@ -210,6 +272,84 @@ class SupabaseService:
                 status_code=500, detail="Failed to create document")
         return response.data[0]
 
+    def upsert_rag_document_by_source(
+        self,
+        title: str,
+        source_uri: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict:
+        response = (
+            self.client.table("rag_documents")
+            .select("id,title,source_uri,metadata")
+            .eq("source_uri", source_uri)
+            .limit(1)
+            .execute()
+        )
+
+        payload = {
+            "title": title,
+            "source_uri": source_uri,
+            "metadata": metadata or {},
+        }
+
+        if response.data:
+            updated = (
+                self.client.table("rag_documents")
+                .update(payload)
+                .eq("id", response.data[0]["id"])
+                .execute()
+            )
+            if not updated.data:
+                raise HTTPException(
+                    status_code=500, detail="Failed to update document")
+            return updated.data[0]
+
+        created = self.client.table("rag_documents").insert(payload).execute()
+        if not created.data:
+            raise HTTPException(
+                status_code=500, detail="Failed to create document")
+        return created.data[0]
+
+    def replace_rag_chunks_for_document(
+        self,
+        document_id: UUID | str,
+        chunks: list[str],
+        embedding: list[float],
+        metadata: dict[str, Any] | None = None,
+    ) -> int:
+        if len(embedding) != self.vector_dimensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Embedding must have {self.vector_dimensions} dimensions",
+            )
+
+        self.client.table("rag_chunks").delete().eq(
+            "document_id", str(document_id)).execute()
+
+        if not chunks:
+            return 0
+
+        embedding_literal = self._to_vector_literal(embedding)
+        rows = [
+            {
+                "document_id": str(document_id),
+                "chunk_index": index,
+                "content": content,
+                "embedding": embedding_literal,
+                "metadata": metadata or {},
+            }
+            for index, content in enumerate(chunks)
+        ]
+
+        inserted_total = 0
+        batch_size = 200
+        for start in range(0, len(rows), batch_size):
+            batch = rows[start:start + batch_size]
+            inserted = self.client.table("rag_chunks").insert(batch).execute()
+            inserted_total += len(inserted.data or [])
+
+        return inserted_total
+
     def create_rag_chunk(self, payload: RagChunkCreateIn) -> dict:
         if len(payload.embedding) != self.vector_dimensions:
             raise HTTPException(
@@ -271,6 +411,48 @@ class SupabaseService:
             },
         ).execute()
         return response.data or []
+
+    def search_rag_chunks_by_text(
+        self,
+        query: str,
+        match_count: int = 5,
+    ) -> list[dict]:
+        normalized = query.strip()
+        if not normalized:
+            return []
+
+        try:
+            direct = (
+                self.client.table("rag_chunks")
+                .select("id,document_id,chunk_index,content,metadata")
+                .ilike("content", f"%{normalized}%")
+                .limit(match_count)
+                .execute()
+            )
+            if direct.data:
+                return direct.data
+
+            tokens = [
+                token
+                for token in re.findall(r"[a-zA-Z0-9]+", normalized.lower())
+                if len(token) > 2
+            ][:6]
+            if not tokens:
+                return []
+
+            or_filter = ",".join(
+                f"content.ilike.%{token}%" for token in tokens
+            )
+            token_match = (
+                self.client.table("rag_chunks")
+                .select("id,document_id,chunk_index,content,metadata")
+                .or_(or_filter)
+                .limit(match_count)
+                .execute()
+            )
+            return token_match.data or []
+        except Exception:
+            return []
 
     @staticmethod
     def _to_vector_literal(embedding: list[float]) -> str:

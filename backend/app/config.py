@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     google_calendar_id: str | None = None
     google_calendar_token_path: str = "calender/token.json"
     admin_seed_emails: str = ""
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 465
+    smtp_sender_email: str | None = None
+    smtp_sender_password: str | None = None
+    rag_local_data_dir: str = "data"
+    rag_auto_ingest_local_data: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",

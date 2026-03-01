@@ -1,6 +1,6 @@
 from datetime import date
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
@@ -62,9 +62,25 @@ class ChatRequestIn(BaseModel):
     user_id: str = Field(min_length=1)
 
 
+class CalendarSlotOut(BaseModel):
+    start_iso: str
+    end_iso: str
+    duration_minutes: int = Field(ge=15, le=240)
+    resource: str | None = None
+
+
+class CalendarFlowOut(BaseModel):
+    status: Literal["slot_available", "slot_unavailable", "missing_datetime"]
+    requested_slot: CalendarSlotOut | None = None
+    nearby_slots: list[CalendarSlotOut] = Field(default_factory=list)
+    requires_user_approval: bool = False
+
+
 class ChatResponseOut(BaseModel):
     answer: str
     sources: list[dict[str, Any]] = Field(default_factory=list)
+    intent: Literal["info_query", "calendar_query"]
+    calendar_flow: CalendarFlowOut | None = None
 
 
 class CalendarAvailabilityIn(BaseModel):
