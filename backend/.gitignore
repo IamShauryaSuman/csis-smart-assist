@@ -131,7 +131,6 @@ venv.bak/
 # RAG / DB
 RAG_db/
 smartassist.db
-data/
 Inductions_Catalogue.pdf
 
 # Spyder project settings
