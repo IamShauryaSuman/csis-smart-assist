@@ -13,12 +13,18 @@ class Settings(BaseSettings):
     frontend_origins: str | None = None
     gemini_api_key: str | None = None
     google_calendar_id: str | None = None
-    google_calendar_token_path: str = "calender/token.json"
+    google_calendar_token_path: str | None = None
+    google_calendar_token: str | None = None
+    google_calendar_refresh_token: str | None = None
+    google_calendar_token_uri: str = "https://oauth2.googleapis.com/token"
+    google_calendar_client_id: str | None = None
+    google_calendar_client_secret: str | None = None
     admin_seed_emails: str = ""
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 465
     smtp_sender_email: str | None = None
     smtp_sender_password: str | None = None
+    admin_receiver_email: str | None = None
     rag_local_data_dir: str = "data"
     rag_auto_ingest_local_data: bool = True
 

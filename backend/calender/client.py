@@ -41,6 +41,31 @@ def _resolve_token_path(token_path: str) -> Path:
     )
 
 
+def _build_credentials(settings: Settings) -> Credentials:
+    """Build Google Calendar credentials from env vars, falling back to token file."""
+    # Prefer environment variables
+    if settings.google_calendar_refresh_token and settings.google_calendar_client_id:
+        return Credentials(
+            token=settings.google_calendar_token,
+            refresh_token=settings.google_calendar_refresh_token,
+            token_uri=settings.google_calendar_token_uri,
+            client_id=settings.google_calendar_client_id,
+            client_secret=settings.google_calendar_client_secret,
+            scopes=SCOPES,
+        )
+
+    # Fall back to token file if env vars are not set
+    if not settings.google_calendar_token_path:
+        raise FileNotFoundError(
+            "Google Calendar credentials not configured. "
+            "Set GOOGLE_CALENDAR_REFRESH_TOKEN + GOOGLE_CALENDAR_CLIENT_ID env vars, "
+            "or set GOOGLE_CALENDAR_TOKEN_PATH to a token JSON file.",
+        )
+
+    token_path = _resolve_token_path(settings.google_calendar_token_path)
+    return Credentials.from_authorized_user_file(str(token_path), SCOPES)
+
+
 def get_calendar_client(settings: Settings):
     if not settings.google_calendar_id:
         raise HTTPException(
@@ -49,16 +74,12 @@ def get_calendar_client(settings: Settings):
         )
 
     try:
-        token_path = _resolve_token_path(settings.google_calendar_token_path)
-        credentials = Credentials.from_authorized_user_file(
-            str(token_path),
-            SCOPES,
-        )
+        credentials = _build_credentials(settings)
         service = build("calendar", "v3", credentials=credentials)
     except FileNotFoundError as exc:
         raise HTTPException(
             status_code=500,
-            detail="Google Calendar token file not found",
+            detail=str(exc),
         ) from exc
     except Exception as exc:
         raise HTTPException(

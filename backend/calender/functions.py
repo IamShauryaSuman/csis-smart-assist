@@ -127,16 +127,22 @@ def create_event(
     return created_event
 
 
-def send_email(body, email_receiver, subject):
-    EMAIL = "sapphire.csis.no.reply@gmail.com"
+def send_email(body, email_receiver, subject, html=None):
+    EMAIL = os.getenv("EMAIL_SENDER")
     APP_PASSWORD = os.getenv("APP_PASSWORD")
+    if not EMAIL or not APP_PASSWORD:
+        print("[Email] EMAIL_SENDER or APP_PASSWORD not configured, skipping")
+        return
+
     msg = EmailMessage()
     msg["From"] = EMAIL
     msg["To"] = email_receiver
     msg["Subject"] = subject
     msg.set_content(body)
+    if html:
+        msg.add_alternative(html, subtype="html")
 
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=5) as server:
         server.login(EMAIL, APP_PASSWORD)
         server.send_message(msg)
 

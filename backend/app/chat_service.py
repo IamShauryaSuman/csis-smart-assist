@@ -2,7 +2,6 @@ import json
 from collections import defaultdict
 from datetime import datetime, timedelta
 from functools import lru_cache
-from importlib import import_module
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -25,13 +24,20 @@ _conversation_memory: dict[str, dict[str, Any]] = defaultdict(
 
 
 @lru_cache
-def get_embed_model():
-    try:
-        sentence_transformers = import_module("sentence_transformers")
-        sentence_transformer_cls = sentence_transformers.SentenceTransformer
-    except Exception:
-        return None
-    return sentence_transformer_cls("intfloat/e5-base-v2")
+def _get_genai_client(api_key: str):
+    """Lazily create a Gemini client (cached per api_key)."""
+    from google import genai
+    return genai.Client(api_key=api_key)
+
+
+def _gemini_embed_query(text: str, api_key: str) -> list[float]:
+    """Embed a single query string using Gemini text-embedding-004."""
+    client = _get_genai_client(api_key)
+    result = client.models.embed_content(
+        model="gemini-embedding-001",
+        contents=[text],
+    )
+    return result.embeddings[0].values
 
 
 class ChatService:
@@ -74,12 +80,14 @@ class ChatService:
         mem = self._get_memory(user_id)
         parts = []
         if mem["summary"]:
-            parts.append(f"Conversation Summary (older context):\n{mem['summary']}")
+            parts.append(
+                f"Conversation Summary (older context):\n{mem['summary']}")
         if mem["history"]:
             recent = "\n".join(
                 f"User: {t['user']}\nAssistant: {t['assistant']}" for t in mem["history"]
             )
-            parts.append(f"Recent conversation (last {len(mem['history'])} turns):\n{recent}")
+            parts.append(
+                f"Recent conversation (last {len(mem['history'])} turns):\n{recent}")
         return "\n---\n".join(parts) if parts else ""
 
     def answer_query(self, query: str, user_id: str) -> ChatResponseOut:
@@ -103,16 +111,18 @@ class ChatService:
         sources: list[dict] = []
 
         try:
+            import os
+            os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
             import chromadb
             client = chromadb.PersistentClient(path="./RAG_db")
             collection = client.get_or_create_collection(name="RAG_db")
 
             if collection.count() > 0:
-                embed_model = get_embed_model()
-                if embed_model is not None:
-                    query_embedding = embed_model.encode([query]).tolist()
+                if self.settings.gemini_api_key:
+                    query_embedding = _gemini_embed_query(
+                        query, self.settings.gemini_api_key)
                     results = collection.query(
-                        query_embeddings=query_embedding,
+                        query_embeddings=[query_embedding],
                         n_results=5,
                     )
                     if results and "documents" in results and results["documents"]:
@@ -128,7 +138,8 @@ class ChatService:
             print(f"[ChromaDB] retrieval error: {exc}")
             rag_chunks = []
 
-        context = "\n".join(rag_chunks) if rag_chunks else "No relevant documents found."
+        context = "\n".join(
+            rag_chunks) if rag_chunks else "No relevant documents found."
 
         # Build conversation memory context
         memory_context = self._build_memory_context(user_id)

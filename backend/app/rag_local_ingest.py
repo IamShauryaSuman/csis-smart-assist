@@ -19,6 +19,38 @@ except Exception:  # pragma: no cover
 
 from .services import SupabaseService
 
+import os as _os
+_os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
+
+try:
+    import chromadb
+except Exception:  # pragma: no cover
+    chromadb = None
+
+
+def _gemini_embed(texts: list[str], api_key: str) -> list[list[float]]:
+    """Generate embeddings using Gemini's text-embedding-004 model.
+
+    This replaces the local SentenceTransformer model to stay within
+    Render free-tier memory limits (512 MB).
+    """
+    from google import genai
+
+    client = genai.Client(api_key=api_key)
+    # Batch in groups of 100 to respect API limits
+    all_embeddings: list[list[float]] = []
+    batch_size = 100
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i + batch_size]
+        result = client.models.embed_content(
+            model="gemini-embedding-001",
+            contents=batch,
+        )
+        for emb in result.embeddings:
+            all_embeddings.append(emb.values)
+    return all_embeddings
+
+
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".html", ".htm", ".txt", ".md"}
 
 
@@ -180,5 +212,92 @@ def sync_local_rag_data_folder(
             summary["chunks_written"] += written
         except Exception as exc:
             summary["errors"].append(f"{path.name}: {exc}")
+
+    return summary
+
+
+def sync_local_rag_to_chromadb(
+    data_dir: str,
+    collection_name: str = "RAG_db",
+    db_path: str = "./RAG_db",
+    chunk_size: int = 140,
+    overlap: int = 30,
+    gemini_api_key: str | None = None,
+) -> dict[str, Any]:
+    """Ingest local documents into ChromaDB with Gemini embeddings.
+
+    Uses Gemini text-embedding-004 instead of a local SentenceTransformer
+    model to stay within Render free-tier memory limits.
+    """
+    summary: dict[str, Any] = {
+        "data_dir": data_dir,
+        "processed_files": 0,
+        "chunks_stored": 0,
+        "skipped_unsupported": 0,
+        "errors": [],
+    }
+
+    if chromadb is None:
+        summary["errors"].append("chromadb is not installed")
+        return summary
+    if not gemini_api_key:
+        summary["errors"].append(
+            "GEMINI_API_KEY not set; skipping ChromaDB ingestion")
+        return summary
+
+    base_path = _resolve_data_dir(data_dir)
+    if not base_path.exists() or not base_path.is_dir():
+        summary["errors"].append(f"Data directory not found: {base_path}")
+        return summary
+
+    client = chromadb.PersistentClient(path=db_path)
+    collection = client.get_or_create_collection(name=collection_name)
+
+    # If collection already has data, skip re-ingestion
+    if collection.count() > 0:
+        summary["chunks_stored"] = collection.count()
+        summary["errors"].append(
+            "Collection already populated; skipping ingestion")
+        return summary
+
+    all_chunks: list[str] = []
+    all_ids: list[str] = []
+    chunk_counter = 0
+
+    for path in sorted(base_path.rglob("*")):
+        if not path.is_file():
+            continue
+        if path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+            summary["skipped_unsupported"] += 1
+            continue
+
+        summary["processed_files"] += 1
+        try:
+            raw = path.read_bytes()
+            text = _extract_text(raw, _infer_mime_type(path))
+            if not text.strip():
+                summary["errors"].append(f"No text extracted from {path.name}")
+                continue
+
+            chunks = _chunk_text(text, chunk_size=chunk_size, overlap=overlap)
+            for chunk in chunks:
+                all_chunks.append(chunk)
+                all_ids.append(f"chunk_{chunk_counter}")
+                chunk_counter += 1
+        except Exception as exc:
+            summary["errors"].append(f"{path.name}: {exc}")
+
+    if all_chunks:
+        try:
+            embeddings = _gemini_embed(all_chunks, gemini_api_key)
+        except Exception as exc:
+            summary["errors"].append(f"Gemini embedding failed: {exc}")
+            return summary
+        collection.add(
+            embeddings=embeddings,
+            documents=all_chunks,
+            ids=all_ids,
+        )
+        summary["chunks_stored"] = len(all_chunks)
 
     return summary

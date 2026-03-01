@@ -1,4 +1,8 @@
+import asyncio
 import smtplib
+import threading
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import timedelta
 from datetime import datetime, timezone
 from email.message import EmailMessage
@@ -10,7 +14,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.chat_service import ChatService
 from app.config import get_settings
-from app.rag_local_ingest import sync_local_rag_data_folder
 from calender.client import get_calendar_client, parse_start_iso
 from calender.functions import create_event, find_nearby_free_slots, is_slot_available
 from app.schemas import (
@@ -32,10 +35,71 @@ from app.schemas import (
 from app.services import SupabaseService
 from app.supabase_client import get_supabase_client
 
+
+def _run_rag_ingest() -> None:
+    """Run RAG ingestion in a background thread so the server can start immediately.
+
+    Heavy dependencies (chromadb, sentence-transformers, torch, onnxruntime)
+    are imported lazily here — NOT at module level — so uvicorn can bind
+    to $PORT before any of them load.
+    """
+    import os
+    os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
+
+    try:
+        from app.rag_local_ingest import sync_local_rag_data_folder, sync_local_rag_to_chromadb
+    except Exception as exc:
+        print(f"[RAG] Failed to import rag_local_ingest: {exc}")
+        return
+
+    try:
+        service = get_supabase_service()
+        summary = sync_local_rag_data_folder(
+            service=service,
+            data_dir=settings.rag_local_data_dir,
+            vector_dimensions=settings.vector_dimensions,
+        )
+        print("[RAG] Supabase sync summary:", summary)
+    except Exception as exc:
+        print(f"[RAG] Supabase sync failed: {exc}")
+
+    try:
+        chroma_summary = sync_local_rag_to_chromadb(
+            data_dir=settings.rag_local_data_dir,
+            gemini_api_key=settings.gemini_api_key,
+        )
+        print("[RAG] ChromaDB sync summary:", chroma_summary)
+    except Exception as exc:
+        print(f"[RAG] ChromaDB sync failed: {exc}")
+
+
+def _schedule_rag_ingest() -> None:
+    """Start RAG ingestion in a background thread (called from event loop timer)."""
+    try:
+        thread = threading.Thread(target=_run_rag_ingest, daemon=True)
+        thread.start()
+        print("[RAG] Background ingestion thread started")
+    except Exception as exc:
+        print(f"[RAG] Failed to start ingestion thread: {exc}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Delay RAG ingestion so uvicorn binds the port first.
+    # call_later runs _schedule_rag_ingest 5s after the event-loop starts.
+    if settings.rag_auto_ingest_local_data:
+        loop = asyncio.get_event_loop()
+        loop.call_later(5, _schedule_rag_ingest)
+        print("[RAG] Ingestion scheduled (5s after port bind)")
+
+    yield
+
+
 app = FastAPI(
     title="CSIS SmartAssist Backend",
     description="Supabase-powered API for users, roles, booking requests, and RAG metadata.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 settings = get_settings()
@@ -105,23 +169,6 @@ def get_chat_service(
     service: SupabaseService = Depends(get_supabase_service),
 ) -> ChatService:
     return ChatService(settings=settings, supabase_service=service)
-
-
-@app.on_event("startup")
-def startup_ingest_local_rag_data() -> None:
-    if not settings.rag_auto_ingest_local_data:
-        return
-
-    try:
-        service = get_supabase_service()
-        summary = sync_local_rag_data_folder(
-            service=service,
-            data_dir=settings.rag_local_data_dir,
-            vector_dimensions=settings.vector_dimensions,
-        )
-        print("[RAG] local data sync summary:", summary)
-    except Exception as exc:
-        print(f"[RAG] local data sync failed: {exc}")
 
 
 @app.get("/")
@@ -194,6 +241,9 @@ def create_booking_request(
     payload: BookingRequestCreateIn,
     service: SupabaseService = Depends(get_supabase_service),
 ) -> dict:
+    print(f"[Booking] Creating request: user={payload.requester_user_id}, "
+          f"location={payload.location}, date={payload.date}, "
+          f"time_slot={payload.time_slot}, purpose={payload.purpose}")
     booking = service.create_booking_request(payload)
 
     # admin_seed_emails = {
@@ -221,20 +271,37 @@ def create_booking_request(
     #         f"Participants: {booking['participants']}\n"
     #     ),
     # )
-    send_email(
-        email_receiver="f20240521@goa.bits-pilani.ac.in",
-        subject=f"[CSIS SmartAssist] New booking request {booking['id']}",
-        body=(
-            "A new booking request has been created.\n\n"
-            f"Request ID: {booking['id']}\n"
-            f"Requester: {requester_label}\n"
-            f"Location: {booking['location']}\n"
-            f"Date: {booking['date']}\n"
-            f"Time slot: {booking['time_slot']}\n"
-            f"Purpose: {booking['purpose']}\n"
-            f"Acceept here: WEBSITE LINK"
-        ),
-    )
+
+    def _notify():
+        try:
+            send_email(
+                email_receiver=settings.admin_receiver_email,
+                subject=f"[CSIS SmartAssist] New booking request {booking['id']}",
+                body=(
+                    "A new booking request has been created.\n\n"
+                    f"Request ID: {booking['id']}\n"
+                    f"Requester: {requester_label}\n"
+                    f"Location: {booking['location']}\n"
+                    f"Date: {booking['date']}\n"
+                    f"Time slot: {booking['time_slot']}\n"
+                    f"Purpose: {booking['purpose']}\n"
+                    f"Accept here: https://csis-smart-assist.vercel.app/"
+                ),
+                html=(
+                    "<p>A new booking request has been created.</p>"
+                    f"<p><b>Request ID:</b> {booking['id']}<br>"
+                    f"<b>Requester:</b> {requester_label}<br>"
+                    f"<b>Location:</b> {booking['location']}<br>"
+                    f"<b>Date:</b> {booking['date']}<br>"
+                    f"<b>Time slot:</b> {booking['time_slot']}<br>"
+                    f"<b>Purpose:</b> {booking['purpose']}</p>"
+                    '<p>Accept here: <a href="https://csis-smart-assist.vercel.app/">DASHBOARD</a></p>'
+                ),
+            )
+        except Exception as exc:
+            print(f"[Email] Failed to send booking notification: {exc}")
+
+    threading.Thread(target=_notify, daemon=True).start()
 
     return booking
 
@@ -295,24 +362,30 @@ def decide_booking_request(
         if calendar_event_link:
             body += f"\nCalendar event: {calendar_event_link}\n"
 
-        send_email(
-            email_receiver=requester["email"],
-            subject=f"[CSIS SmartAssist] Booking request {decision_word}",
-            body=body,
-        )
-        send_email(
-            email_receiver="f20240521@goa.bits-pilani.ac.in",
-            subject=f"[CSIS SmartAssist] Booking request {decision_word}",
-            body=(
-                "CSIS SmartAssist booking request has been confirmed.\n\n"
-                f"Request ID: {updated_booking['id']}\n"
-                f"Status: {decision_word}\n"
-                f"Location: {updated_booking['location']}\n"
-                f"Date: {updated_booking['date']}\n"
-                f"Time slot: {updated_booking['time_slot']}\n"
-                f"Remarks: {payload.remarks or '-'}\n"
-            ),
-        )
+        def _notify_decision():
+            try:
+                send_email(
+                    email_receiver=requester["email"],
+                    subject=f"[CSIS SmartAssist] Booking request {decision_word}",
+                    body=body,
+                )
+                send_email(
+                    email_receiver=settings.admin_receiver_email,
+                    subject=f"[CSIS SmartAssist] Booking request {decision_word}",
+                    body=(
+                        "CSIS SmartAssist booking request has been confirmed.\n\n"
+                        f"Request ID: {updated_booking['id']}\n"
+                        f"Status: {decision_word}\n"
+                        f"Location: {updated_booking['location']}\n"
+                        f"Date: {updated_booking['date']}\n"
+                        f"Time slot: {updated_booking['time_slot']}\n"
+                        f"Remarks: {payload.remarks or '-'}\n"
+                    ),
+                )
+            except Exception as exc:
+                print(f"[Email] Failed to send decision notification: {exc}")
+
+        threading.Thread(target=_notify_decision, daemon=True).start()
 
     if calendar_event_link:
         updated_booking["calendar_event_link"] = calendar_event_link
@@ -348,6 +421,8 @@ def search_rag_chunks(
 def ingest_local_rag_data(
     service: SupabaseService = Depends(get_supabase_service),
 ) -> dict:
+    from app.rag_local_ingest import sync_local_rag_data_folder
+
     return sync_local_rag_data_folder(
         service=service,
         data_dir=settings.rag_local_data_dir,

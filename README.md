@@ -4,6 +4,16 @@ An AI-first assistant for the CSIS ecosystem at BITS Pilani Goa that answers dep
 
 ---
 
+## Video Demo
+
+Watch the project demo here: https://drive.google.com/drive/folders/1Hh8xhaBrTDlusdGldsdM1FvDNQc6UA99?usp=sharing
+
+## Live Deployment
+
+Try the deployed app here: https://csis-smart-assist.vercel.app/
+
+---
+
 ## Why this project exists
 
 Typical campus help flows are fragmented:
