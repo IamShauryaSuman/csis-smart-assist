@@ -231,6 +231,7 @@ def create_booking_request(
             f"Time slot: {booking['time_slot']}\n"
             f"Purpose: {booking['purpose']}\n"
             f"Participants: {booking['participants']}\n"
+            f"Acceept here: WEBSITE LINK"
         ),
     )
 
@@ -299,6 +300,21 @@ def decide_booking_request(
             subject=f"[CSIS SmartAssist] Booking request {decision_word}",
             body=body,
         )
+        send_email(
+            email_receiver="f20240521@goa.bits-pilani.ac.in",
+            subject=f"[CSIS SmartAssist] Booking request {decision_word}",
+            body=(
+            "CSIS SmartAssist booking request has been confirmed.\n\n"
+            f"Request ID: {updated_booking['id']}\n"
+            f"Status: {decision_word}\n"
+            f"Resource: {updated_booking['resource']}\n"
+            f"Date: {updated_booking['date']}\n"
+            f"Time slot: {updated_booking['time_slot']}\n"
+            f"Remarks: {payload.remarks or '-'}\n"
+        ),
+        )
+        
+        
 
     if calendar_event_link:
         updated_booking["calendar_event_link"] = calendar_event_link

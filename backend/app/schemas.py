@@ -27,7 +27,7 @@ class BookingRequestCreateIn(BaseModel):
     resource: str = Field(min_length=2, max_length=100)
     date: date
     time_slot: str = Field(min_length=3, max_length=50)
-    purpose: str = Field(min_length=2, max_length=300)
+    purpose: str = Field(min_length=1, max_length=300)
     participants: int = Field(ge=1, le=1000)
     remarks: str | None = Field(default=None, max_length=1000)
 
