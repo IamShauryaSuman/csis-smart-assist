@@ -1,8 +1,0 @@
-CSIS SmartAssist: A Secure Campus-Wide On-Premise AI Chatbot and Smart Resource Booking System
-Proposed by: Prof. Neena Goveas
-College: BITS Pilani, K.K. Birla Goa Campus (BITS Goa)
-
-Project Description
-CSIS SmartAssist proposes a secure, campus-wide AI-powered conversational chatbot framework, initially deployed for the CSIS department and designed to scale across the entire campus. The system assists faculty, students, and administrative staff by providing instant, accurate responses to academic and administrative queries, while also enabling intelligent lab and room booking through natural language interaction.
-
-The chatbot addresses common queries such as TA form procedures, TA allocation timelines, bill forwarding and reimbursement workflows, academic policies, and lab access guidelines. By acting as a single point of interaction, it reduces manual communication overhead and improves operational efficiency.
