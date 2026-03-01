@@ -1,8 +1,10 @@
 from datetime import timezone
 from datetime import timedelta, timezone
 from zoneinfo import ZoneInfo
-
+import smtplib
+from email.message import EmailMessage
 from dotenv import load_dotenv
+load_dotenv()
 import os
 
 ist = ZoneInfo("Asia/Kolkata")
@@ -123,18 +125,14 @@ def create_event(
 
     return created_event
 
-import smtplib
-from email.message import EmailMessage
-
-EMAIL = "sapphire.csis.no.reply@gmail.com"
-APP_PASSWORD = os.getenv("APP_PASSWORD")
-
-def send_email(title, email_receiver, subject):
+def send_email(body, email_receiver, subject):
+    EMAIL = "sapphire.csis.no.reply@gmail.com"
+    APP_PASSWORD = os.getenv("APP_PASSWORD")
     msg = EmailMessage()
     msg["From"] = EMAIL
     msg["To"] = email_receiver
     msg["Subject"] = subject
-    msg.set_content(title)
+    msg.set_content(body)
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(EMAIL, APP_PASSWORD)
