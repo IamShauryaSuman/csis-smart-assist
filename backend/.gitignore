@@ -123,10 +123,16 @@ celerybeat.pid
 
 # Environments
 .venv
+venv/
 env/
 ENV/
 env.bak/
 venv.bak/
+
+# Local environment variables
+.env
+.env.*
+!.env.example
 
 # RAG / DB
 RAG_db/
@@ -170,4 +176,5 @@ cython_debug/
 
 # MacOS
 .DS_Store
+calender/tokens.json
 calender/token.json

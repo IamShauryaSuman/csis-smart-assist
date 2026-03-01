@@ -87,6 +87,29 @@ uvicorn Chatbot.main:app --host 127.0.0.1 --port 8000
 API: `http://127.0.0.1:8000`  
 Docs: `http://127.0.0.1:8000/docs`
 
+## Deploy backend to Render
+
+This repo includes a root `render.yaml` that deploys `backend/` as a Python web service.
+
+1. Push this repository to GitHub.
+2. In Render, create a **Blueprint** from the repository (it will detect `render.yaml`).
+3. Set environment variables in Render service settings:
+   - `SUPABASE_URL`
+   - `SUPABASE_SECRET_KEY` (or `SUPABASE_SERVICE_ROLE_KEY`)
+   - `FRONTEND_ORIGIN` (your Vercel frontend URL)
+   - `GEMINI_API_KEY` (if chat generation is enabled)
+   - `GOOGLE_CALENDAR_ID` and `GOOGLE_CALENDAR_TOKEN_PATH` (if calendar endpoints are used)
+   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SENDER_EMAIL`, `SMTP_SENDER_PASSWORD` (if notifications are enabled)
+4. Optional recommended values in Render:
+   - `RAG_AUTO_INGEST_LOCAL_DATA=false`
+   - `VECTOR_DIMENSIONS=1536`
+
+The backend start command is:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port $PORT
+```
+
 ## API summary
 
 - `POST /chat`
