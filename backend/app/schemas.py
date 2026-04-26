@@ -81,6 +81,7 @@ class ChatResponseOut(BaseModel):
     sources: list[dict[str, Any]] = Field(default_factory=list)
     intent: Literal["info_query", "calendar_query"]
     calendar_flow: CalendarFlowOut | None = None
+    assistant_message_id: str | None = None
 
 
 class CalendarAvailabilityIn(BaseModel):

@@ -212,9 +212,25 @@ function HomePage() {
         id?: string;
         status?: string;
       };
-      appendAssistantMessage(
-        `Booking request created successfully${created.id ? ` (ID: ${created.id})` : ""}. Status: ${created.status ?? "pending"}.`,
-      );
+      const confirmationMessage = `Booking request created successfully${created.id ? ` (ID: ${created.id})` : ""}. Status: ${created.status ?? "pending"}.`;
+      appendAssistantMessage(confirmationMessage);
+
+      // Persist confirmation message to backend
+      if (activeChatId) {
+        await fetch(
+          `${backendUrl}/chat/sessions/${activeChatId}/messages`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              role: "assistant",
+              content: confirmationMessage,
+            }),
+          },
+        ).catch((err) =>
+          console.error("Failed to persist confirmation message:", err),
+        );
+      }
 
       // Persist actioned state in backend message metadata
       if (activeChatId) {
@@ -233,9 +249,25 @@ function HomePage() {
       }
     } catch (err) {
       console.error("Booking creation error:", err);
-      appendAssistantMessage(
-        "I could not create the booking request right now. Please try again.",
-      );
+      const errorMessage = "I could not create the booking request right now. Please try again.";
+      appendAssistantMessage(errorMessage);
+      
+      // Also persist error message to backend
+      if (activeChatId) {
+        await fetch(
+          `${backendUrl}/chat/sessions/${activeChatId}/messages`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              role: "assistant",
+              content: errorMessage,
+            }),
+          },
+        ).catch((err) =>
+          console.error("Failed to persist error message:", err),
+        );
+      }
     } finally {
       setIsBookingActionLoading(false);
     }
@@ -524,10 +556,11 @@ function HomePage() {
           intent: "info_query" | "calendar_query";
           calendar_flow?: CalendarFlow;
           sources?: { document_id?: string; similarity?: number }[];
+          assistant_message_id?: string;
         };
 
         const botResponse: Message = {
-          id: (Date.now() + 1).toString(),
+          id: payload.assistant_message_id ?? (Date.now() + 1).toString(),
           role: "assistant",
           content: payload.answer,
           calendarFlow: payload.calendar_flow,

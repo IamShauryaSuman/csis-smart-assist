@@ -440,6 +440,8 @@ def chat(
     result = service.answer_query(query=payload.query, user_id=payload.user_id)
 
     # Auto-persist messages if session_id is provided
+    assistant_message_id: str | None = None
+
     if payload.session_id:
         try:
             supa_service.add_chat_message(
@@ -453,7 +455,7 @@ def chat(
                 msg_meta["calendar_flow"] = result.calendar_flow.model_dump()
             if result.sources:
                 msg_meta["sources"] = result.sources
-            supa_service.add_chat_message(
+            assistant_message = supa_service.add_chat_message(
                 session_id=payload.session_id,
                 role="assistant",
                 content=result.answer,
@@ -465,10 +467,14 @@ def chat(
             if len(user_msgs) == 1:
                 title = payload.query[:60] or "New chat"
                 supa_service.update_session_title(payload.session_id, title)
+            assistant_message_id = str(assistant_message.get("id"))
         except Exception as exc:
             print(f"[Chat History] save error: {exc}")
 
-    return result
+    response = result.model_dump()
+    if assistant_message_id is not None:
+        response["assistant_message_id"] = assistant_message_id
+    return response
 
 
 # ── Chat history endpoints ────────────────────────────────────────────

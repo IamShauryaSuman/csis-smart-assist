@@ -430,9 +430,12 @@ User message:
                         return response.text
                 except Exception as exc:
                     message = str(exc).lower()
+                    print(f"[Gemini] Error with {model_name}: {exc}")
                     if "resource_exhausted" in message or "quota" in message or "code': 429" in message or "code\": 429" in message:
                         return "__LLM_QUOTA_EXCEEDED__"
                     continue
+            print(f"[Gemini] All model candidates failed for prompt")
             return "__LLM_UNAVAILABLE__"
-        except Exception:
+        except Exception as exc:
+            print(f"[Gemini] Outer exception: {exc}")
             return "__LLM_UNAVAILABLE__"

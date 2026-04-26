@@ -1,0 +1,88 @@
+# CSIS SmartAssist 🚀
+
+**Hackenza Hackathon Submission**
+
+CSIS SmartAssist is an intelligent, full-stack, AI-driven assistant specifically designed for the **Computer Science & Information Systems (CSIS) Department** (built with BITS Pilani workflows in mind). It goes beyond traditional chatbots by combining **Retrieval-Augmented Generation (RAG)** for departmental queries with an **Action-Oriented Smart Booking System** integrated directly with Google Calendar, Role-Based Access Control (RBAC), and automated email workflows.
+
+---
+
+## 🌟 Key Features
+
+### 1. Context-Aware AI (RAG Pipeline)
+- Answers queries strictly based on authorized local departmental documents (Policies, Lab Guidelines, Timetables, etc.).
+- Backed by **Google Gemini** models and a **ChromaDB** local vector store for scalable, private embeddings.
+- Prevents hallucination by grounding answers in exact internal documents with citation tracking.
+
+### 2. Smart Booking & Action-Oriented Chat
+- Users can naturally ask to "Book the Calendar Room for tomorrow at 2 PM for 1 hour".
+- The AI extracts the intent, date, time, and location, fetching real-time availability from the **Google Calendar API**.
+- Injects a dynamic React interactive component directly into the chat stream for the user to confirm their booking request.
+
+### 3. Admin Dashboard & RBAC
+- Robust **Role-Based Access Control (RBAC)** through Supabase.
+- Standard users can only make booking requests, while Admins get a dedicated dashboard to monitor, approve, or decline bookings.
+- Approving a booking programmatically generates the Google Calendar event and links it to the internal ecosystem.
+
+### 4. Automated Workflow via Email
+- Completely automated SMTP email dispatch system. 
+- Admins receive immediate alerts upon new booking requests.
+- Users receive real-time confirmations and calendar event links when their requests are accepted or declined.
+
+### 5. Persistent State & Chat History
+- Chat sessions are cleanly serialized and securely stored in **Supabase PostgreSQL**.
+- Multi-session chat history allows users to log out, log back in, and seamlessly resume previous conversations with complete context.
+
+---
+
+## 🛠 Tech Stack
+
+**Frontend:**
+- **Framework**: Next.js 14 (App Router), React
+- **Styling**: Tailwind CSS
+- **Authentication**: NextAuth.js (Google OAuth)
+- **UI Components**: Dynamic chat injection, markdown rendering (`react-markdown`), date processing (`date-fns`)
+
+**Backend:**
+- **Framework**: FastAPI (Python 3.12)
+- **Database**: Supabase (PostgreSQL)
+- **AI/LLM**: Google Gemini API, Local RAG Pipeline (ChromaDB, embeddings)
+- **Integrations**: Google Calendar API & Google Auth library, SMTP Email Dispatcher
+
+---
+
+## 🚀 Getting Started
+
+### 1. Repository Setup
+```bash
+git clone https://github.com/IamShauryaSuman/csis-smart-assist.git
+cd csis-smart-assist
+```
+
+### 2. Backend Setup
+Navigate into `backend/`, setup your python environment, and run the server.
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -r requirements-rag.txt
+
+# Create .env based on .env.example
+# Run the local server
+uvicorn main:app --reload --port 8000
+```
+*(Ensure Supabase migrations are run and local RAG data is ingested via the provided scripts)*
+
+### 3. Frontend Setup
+Navigate into `frontend/` and start the development server.
+```bash
+cd frontend
+npm install
+
+# Create .env.local with NEXTAUTH_SECRET, GOOGLE_CLIENT_ID, NEXT_PUBLIC_BACKEND_URL
+npm run dev
+```
+
+---
+
+*Built with ❤️ for the Hackenza Hackathon*
