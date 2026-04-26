@@ -24,12 +24,6 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Optional RAG extras (embeddings/vector tooling):
-
-```bash
-pip install -r requirements-rag.txt
-```
-
 ### 4) Environment
 
 Create `.env` in `backend/` from `.env.example` and set:
@@ -70,12 +64,6 @@ This creates:
 
 ```bash
 curl -X POST http://localhost:8000/rag/ingest-local
-```
-
-Legacy/local vector build script:
-
-```bash
-python ingest_local.py --dir ./data
 ```
 
 ### 7) Run API

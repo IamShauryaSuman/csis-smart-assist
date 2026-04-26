@@ -39,8 +39,8 @@ from app.supabase_client import get_supabase_client
 def _run_rag_ingest() -> None:
     """Run RAG ingestion in a background thread so the server can start immediately.
 
-    Heavy dependencies (chromadb, sentence-transformers, torch, onnxruntime)
-    are imported lazily here — NOT at module level — so uvicorn can bind
+    Heavy dependencies (for example, chromadb and parser libraries)
+    are imported lazily here so uvicorn can bind
     to $PORT before any of them load.
     """
     import os
