@@ -100,6 +100,12 @@ class CalendarNearbyIn(BaseModel):
 class ChatMessageCreateIn(BaseModel):
     content: str
     role: Literal["user", "assistant"]
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ChatMessageUpdateIn(BaseModel):
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
 
 
 class ChatSessionCreateIn(BaseModel):

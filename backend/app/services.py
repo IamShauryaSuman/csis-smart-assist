@@ -518,3 +518,22 @@ class SupabaseService:
         if not response.data:
             raise HTTPException(status_code=404, detail="Chat session not found")
         return response.data[0]
+
+    def update_chat_message_metadata(self, message_id: str, metadata: dict) -> dict:
+        # First get existing metadata
+        existing = self.client.table("chat_messages").select("metadata").eq("id", message_id).execute()
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="Message not found")
+
+        new_metadata = existing.data[0].get("metadata") or {}
+        new_metadata.update(metadata)
+
+        response = (
+            self.client.table("chat_messages")
+            .update({"metadata": new_metadata})
+            .eq("id", message_id)
+            .execute()
+        )
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to update message metadata")
+        return response.data[0]

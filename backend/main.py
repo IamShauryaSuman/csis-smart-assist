@@ -23,6 +23,7 @@ from app.schemas import (
     CalendarAvailabilityIn,
     CalendarNearbyIn,
     ChatMessageCreateIn,
+    ChatMessageUpdateIn,
     ChatRequestIn,
     ChatResponseOut,
     ChatSessionCreateIn,
@@ -509,6 +510,19 @@ def add_chat_message(
         session_id=session_id,
         role=payload.role,
         content=payload.content,
+        metadata=payload.metadata,
+    )
+
+
+@app.patch("/chat/sessions/{session_id}/messages/{message_id}")
+def update_chat_message_metadata(
+    session_id: str,
+    message_id: str,
+    payload: ChatMessageUpdateIn,
+    service: SupabaseService = Depends(get_supabase_service),
+) -> dict:
+    return service.update_chat_message_metadata(
+        message_id=message_id,
         metadata=payload.metadata,
     )
 

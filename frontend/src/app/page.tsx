@@ -215,6 +215,22 @@ function HomePage() {
       appendAssistantMessage(
         `Booking request created successfully${created.id ? ` (ID: ${created.id})` : ""}. Status: ${created.status ?? "pending"}.`,
       );
+
+      // Persist actioned state in backend message metadata
+      if (activeChatId) {
+        await fetch(
+          `${backendUrl}/chat/sessions/${activeChatId}/messages/${messageId}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              metadata: { is_actioned: true },
+            }),
+          },
+        ).catch((err) =>
+          console.error("Failed to update message metadata:", err),
+        );
+      }
     } catch (err) {
       console.error("Booking creation error:", err);
       appendAssistantMessage(
@@ -366,6 +382,17 @@ function HomePage() {
             s.id === activeChatId ? { ...s, messages: msgs } : s,
           ),
         );
+
+        const actionedIds = data
+          .filter((m) => (m.metadata as Record<string, unknown>)?.is_actioned)
+          .map((m) => m.id);
+        if (actionedIds.length > 0) {
+          setActionedMessageIds((prev) => {
+            const next = new Set(prev);
+            actionedIds.forEach((id) => next.add(id));
+            return next;
+          });
+        }
       } catch {}
     };
 
