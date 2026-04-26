@@ -10,14 +10,21 @@ class Settings(BaseSettings):
     supabase_key: str | None = None
     vector_dimensions: int = 1536
     frontend_origin: str = "http://localhost:3000"
+    frontend_origins: str | None = None
     gemini_api_key: str | None = None
     google_calendar_id: str | None = None
-    google_calendar_token_path: str = "calender/token.json"
+    google_calendar_token_path: str | None = None
+    google_calendar_token: str | None = None
+    google_calendar_refresh_token: str | None = None
+    google_calendar_token_uri: str = "https://oauth2.googleapis.com/token"
+    google_calendar_client_id: str | None = None
+    google_calendar_client_secret: str | None = None
     admin_seed_emails: str = ""
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 465
     smtp_sender_email: str | None = None
     smtp_sender_password: str | None = None
+    admin_receiver_email: str | None = None
     rag_local_data_dir: str = "data"
     rag_auto_ingest_local_data: bool = True
 
@@ -38,6 +45,26 @@ class Settings(BaseSettings):
         raise ValueError(
             "Missing Supabase server key. Set SUPABASE_SECRET_KEY (preferred) or SUPABASE_SERVICE_ROLE_KEY.",
         )
+
+    @property
+    def cors_origins(self) -> list[str]:
+        configured_origins = self.frontend_origins or self.frontend_origin
+        parsed_origins = []
+
+        for origin in configured_origins.split(","):
+            normalized_origin = origin.strip().strip('"').strip("'").rstrip("/")
+            if not normalized_origin:
+                continue
+            if normalized_origin not in parsed_origins:
+                parsed_origins.append(normalized_origin)
+
+        if parsed_origins:
+            return parsed_origins
+
+        return [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ]
 
 
 @lru_cache

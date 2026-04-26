@@ -26,7 +26,7 @@ class BookingRequestCreateIn(BaseModel):
     requester_user_id: UUID
     location: str = Field(min_length=2, max_length=100)
     date: date
-    time_slot: str = Field(min_length=11, max_length=11)
+    time_slot: str = Field(min_length=5, max_length=23)
     purpose: str = Field(min_length=1)
     remarks: str | None = None
 

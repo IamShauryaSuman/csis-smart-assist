@@ -69,9 +69,7 @@ type SyncedUserPayload = {
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 
-
 const initialBookingRequests: BookingRequest[] = [];
-
 
 const formatHistoryTime = (isoDate: string) => {
   const value = new Date(isoDate);
@@ -101,8 +99,7 @@ function HomePage() {
   const [syncedUserId, setSyncedUserId] = useState<string | null>(null);
   const isAdmin = userRoles.includes("admin");
 
-  const [chatSessions, setChatSessions] =
-    useState<ChatSession[]>([]);
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [bookingRequests, setBookingRequests] = useState<BookingRequest[]>(
     initialBookingRequests,
@@ -112,8 +109,12 @@ function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSessionsLoading, setIsSessionsLoading] = useState(false);
   const [isBookingActionLoading, setIsBookingActionLoading] = useState(false);
-  const [actionedMessageIds, setActionedMessageIds] = useState<Set<string>>(new Set());
-  const [bookingPurposes, setBookingPurposes] = useState<Record<string, string>>({});
+  const [actionedMessageIds, setActionedMessageIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [bookingPurposes, setBookingPurposes] = useState<
+    Record<string, string>
+  >({});
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const sortedChatSessions = [...chatSessions].sort(
@@ -124,7 +125,8 @@ function HomePage() {
   const activeChat = useMemo(
     () =>
       chatSessions.find((chatSession) => chatSession.id === activeChatId) ??
-      chatSessions[0] ?? null,
+      chatSessions[0] ??
+      null,
     [activeChatId, chatSessions],
   );
 
@@ -134,17 +136,12 @@ function HomePage() {
     const start = new Date(slot.start_iso);
     const end = new Date(slot.end_iso);
 
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    const fmt = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
     return {
       date: start.toISOString().split("T")[0],
-      time_slot: `${start.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      })}-${end.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      })}`,
+      time_slot: `${fmt(start)}-${fmt(end)}`,
     };
   };
 
@@ -169,7 +166,10 @@ function HomePage() {
     );
   };
 
-  const createBookingFromSlot = async (slot: CalendarSlot, messageId: string) => {
+  const createBookingFromSlot = async (
+    slot: CalendarSlot,
+    messageId: string,
+  ) => {
     const requesterId = syncedUserId || session?.user?.email;
     if (!requesterId) {
       appendAssistantMessage(
@@ -203,7 +203,9 @@ function HomePage() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to create booking request");
+        const errorBody = await response.text().catch(() => "");
+        console.error("Booking request failed:", response.status, errorBody);
+        throw new Error(`Failed to create booking request: ${response.status}`);
       }
 
       const created = (await response.json()) as {
@@ -213,7 +215,8 @@ function HomePage() {
       appendAssistantMessage(
         `Booking request created successfully${created.id ? ` (ID: ${created.id})` : ""}. Status: ${created.status ?? "pending"}.`,
       );
-    } catch {
+    } catch (err) {
+      console.error("Booking creation error:", err);
       appendAssistantMessage(
         "I could not create the booking request right now. Please try again.",
       );
@@ -255,12 +258,13 @@ function HomePage() {
       }
     };
     syncSessionUser();
-  }, [session]);
+  }, [session?.user?.email]);
 
   // Load chat sessions from backend
   useEffect(() => {
     if (!session?.user?.email) return;
 
+    let cancelled = false;
     const loadSessions = async () => {
       setIsSessionsLoading(true);
       try {
@@ -279,7 +283,17 @@ function HomePage() {
           updatedAt: s.updated_at,
           messages: [],
         }));
-        setChatSessions(loaded);
+        if (cancelled) return;
+        setChatSessions((prev) => {
+          // Merge: keep messages from already-loaded sessions
+          const existingById = new Map(prev.map((s) => [s.id, s]));
+          return loaded.map((s) => {
+            const existing = existingById.get(s.id);
+            return existing && existing.messages.length > 0
+              ? { ...s, messages: existing.messages }
+              : s;
+          });
+        });
         if (loaded.length > 0) {
           setActiveChatId(loaded[0].id);
         } else {
@@ -308,14 +322,17 @@ function HomePage() {
             setActiveChatId(newChat.id);
           }
         }
-      } catch { }
-      finally {
+      } catch {
+      } finally {
         setIsSessionsLoading(false);
       }
     };
 
     loadSessions();
-  }, [session]);
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.email]);
 
   // Load messages when active session changes
   useEffect(() => {
@@ -340,7 +357,8 @@ function HomePage() {
           id: m.id,
           role: m.role,
           content: m.content,
-          calendarFlow: (m.metadata?.calendar_flow as CalendarFlow) ?? undefined,
+          calendarFlow:
+            (m.metadata?.calendar_flow as CalendarFlow) ?? undefined,
           citations: [],
         }));
         setChatSessions((prev) =>
@@ -348,7 +366,7 @@ function HomePage() {
             s.id === activeChatId ? { ...s, messages: msgs } : s,
           ),
         );
-      } catch { }
+      } catch {}
     };
 
     loadMessages();
@@ -374,7 +392,7 @@ function HomePage() {
             status: request.status,
           })),
         );
-      } catch { }
+      } catch {}
     };
 
     loadRequests();
@@ -410,7 +428,7 @@ function HomePage() {
       setChatSessions((previous) => [newChat, ...previous]);
       setActiveChatId(newChat.id);
       setInput("");
-    } catch { }
+    } catch {}
   };
 
   const handleSendMessage = (event: FormEvent) => {
@@ -526,7 +544,6 @@ function HomePage() {
       }
     })();
   };
-
 
   const requestStatusColor = (requestStatus: BookingRequest["status"]) => {
     if (requestStatus === "accepted") return "text-success";
@@ -766,10 +783,11 @@ function HomePage() {
                       setActiveChatId(chatSession.id);
                       setInput("");
                     }}
-                    className={`flex w-full items-start justify-between gap-3 border px-3 py-2 text-left transition ${isActive
-                      ? "border-accent bg-bg-surface"
-                      : "border-border hover:bg-bg-surface"
-                      }`}
+                    className={`flex w-full items-start justify-between gap-3 border px-3 py-2 text-left transition ${
+                      isActive
+                        ? "border-accent bg-bg-surface"
+                        : "border-border hover:bg-bg-surface"
+                    }`}
                   >
                     <span className="min-w-0 flex-1 truncate text-sm text-text-primary">
                       {chatSession.title}
@@ -871,14 +889,19 @@ function HomePage() {
                         <div className="flex flex-wrap gap-2">
                           <button
                             onClick={() => {
-                              setActionedMessageIds((prev) => new Set(prev).add(message.id));
+                              setActionedMessageIds((prev) =>
+                                new Set(prev).add(message.id),
+                              );
                               createBookingFromSlot(
                                 message.calendarFlow!
                                   .requested_slot as CalendarSlot,
                                 message.id,
                               );
                             }}
-                            disabled={isBookingActionLoading || actionedMessageIds.has(message.id)}
+                            disabled={
+                              isBookingActionLoading ||
+                              actionedMessageIds.has(message.id)
+                            }
                             className="border border-success px-3 py-2 font-mono text-xs text-success transition hover:bg-success/10 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             {actionedMessageIds.has(message.id)
@@ -889,12 +912,17 @@ function HomePage() {
                           </button>
                           <button
                             onClick={() => {
-                              setActionedMessageIds((prev) => new Set(prev).add(message.id));
+                              setActionedMessageIds((prev) =>
+                                new Set(prev).add(message.id),
+                              );
                               appendAssistantMessage(
                                 "Understood. I did not create the booking request.",
                               );
                             }}
-                            disabled={isBookingActionLoading || actionedMessageIds.has(message.id)}
+                            disabled={
+                              isBookingActionLoading ||
+                              actionedMessageIds.has(message.id)
+                            }
                             className="border border-danger px-3 py-2 font-mono text-xs text-danger transition hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             Decline
@@ -919,7 +947,9 @@ function HomePage() {
                               return (
                                 <button
                                   key={`${message.id}-slot-${index}`}
-                                  onClick={() => createBookingFromSlot(slot, message.id)}
+                                  onClick={() =>
+                                    createBookingFromSlot(slot, message.id)
+                                  }
                                   disabled={isBookingActionLoading}
                                   className="border border-accent px-3 py-2 font-mono text-xs text-accent transition hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
@@ -975,7 +1005,6 @@ function HomePage() {
               </form>
             </div>
           </section>
-
         </main>
       )}
     </div>

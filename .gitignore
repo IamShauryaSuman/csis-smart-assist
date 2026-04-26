@@ -20,6 +20,7 @@ frontend/.env.local
 frontend/.env.*.local
 
 # Local OAuth / calendar tokens
+tokens.json
 backend/calender/token.json
 backend/calender/tokens.json
 
