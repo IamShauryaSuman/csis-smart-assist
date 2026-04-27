@@ -234,9 +234,11 @@ class SupabaseService:
                 email_map[u["id"]] = u["email"]
 
         for booking in bookings:
-            booking["requester_email"] = email_map.get(
+            email = email_map.get(
                 booking.get("requester_user_id", ""), booking.get("requester_user_id", "")
             )
+            booking["requester_email"] = email
+            booking["email"] = email # Added for frontend compatibility
 
         return bookings
 

@@ -36,11 +36,9 @@ def _get_embeddings(texts: list[str], use_gemini: bool = False, gemini_key: str 
 
 
 def _google_embed(texts: list[str], api_key: str) -> list[list[float]]:
-    """Generate embeddings using Google's Generative AI API."""
+    """Generate 768-dim embeddings using Gemini."""
     import google.generativeai as genai
     genai.configure(api_key=api_key)
-    
-    # Google supports batching
     try:
         result = genai.embed_content(
             model="models/gemini-embedding-2",
@@ -48,10 +46,10 @@ def _google_embed(texts: list[str], api_key: str) -> list[list[float]]:
             task_type="retrieval_document",
             output_dimensionality=768,
         )
-        return result["embedding"]
+        return result["embeddings"]
     except Exception as exc:
-        print(f"[Gemini Embed] Failed: {exc}")
-        return [[0.0] * 768 for _ in texts]
+        print(f"[Gemini Embed] Failed: {exc}. Falling back to Ollama.")
+        return _ollama_embed(texts)
 
 
 def _ollama_embed(texts: list[str], model_name: str = "nomic-embed-text", ollama_url: str = "http://localhost:11434") -> list[list[float]]:
@@ -104,7 +102,7 @@ def _extract_text(raw: bytes, mime_type: str) -> str:
             return ""
         reader = PyPDF2.PdfReader(io.BytesIO(raw))
         extracted = "\n".join((page.extract_text() or "")
-                              for page in reader.pages)
+                               for page in reader.pages)
     elif "word" in mime_type or "document" in mime_type:
         if docx is None:
             return ""

@@ -39,7 +39,7 @@ class ChatService:
         return self._embed_query_ollama(text)
 
     def _embed_query_google(self, text: str) -> list[float]:
-        """Generate embeddings using Google's Generative AI API."""
+        """Generate 768-dim embeddings using Gemini."""
         try:
             import google.generativeai as genai
             genai.configure(api_key=self.settings.gemini_api_key)
@@ -51,8 +51,8 @@ class ChatService:
             )
             return result["embedding"]
         except Exception as exc:
-            logger.error(f"[Gemini Embed] Error: {exc}")
-            return [0.0] * 768
+            print(f"[Gemini Embed] Failed: {exc}. Falling back to Ollama.")
+            return self._embed_query_ollama(text)
 
     def _embed_query_ollama(self, text: str) -> list[float]:
         """Generate embeddings using Ollama's embedding API."""
@@ -90,9 +90,9 @@ class ChatService:
             import google.generativeai as genai
             genai.configure(api_key=self.settings.gemini_api_key)
             # Use the model name from settings or a default
-            model_name = self.settings.ollama_model.split(":")[0] if ":" in self.settings.ollama_model else "gemini-2.5-flash"
+            model_name = self.settings.ollama_model.split(":")[0] if ":" in self.settings.ollama_model else "gemini-2.0-flash"
             if "gemma" in model_name.lower():
-                model_name = "gemini-2.5-flash"
+                model_name = "gemini-2.0-flash"
             
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
@@ -480,5 +480,3 @@ User message:
 
     def _generate_answer(self, prompt: str) -> str:
         return self._call_llm(prompt)
-
-

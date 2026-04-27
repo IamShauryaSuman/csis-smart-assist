@@ -445,11 +445,11 @@ function HomePage() {
       try {
         const response = await fetch(`${backendUrl}/booking-requests`);
         if (!response.ok) return;
-        const data = (await response.json()) as (BackendBookingRequest & { requester_email?: string })[];
+        const data = (await response.json()) as (BackendBookingRequest & { requester_email?: string, email?: string })[];
         setBookingRequests(
-          data.map((request) => ({
+          data.map((request: any) => ({
             id: request.id,
-            email: request.requester_email ?? request.requester_user_id,
+            email: request.email || request.requester_email || request.requester_user_id,
             location: request.location,
             date: request.date,
             time: request.time_slot,

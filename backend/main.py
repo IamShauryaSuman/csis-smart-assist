@@ -342,31 +342,9 @@ def create_booking_request(
 
     booking = service.create_booking_request(payload)
 
-    # admin_seed_emails = {
-    #     item.strip().lower()
-    #     for item in settings.admin_seed_emails.split(",")
-    #     if item.strip()
-    # }
-    # admin_emails = set(service.list_admin_emails())
-    # admin_emails.update(admin_seed_emails)
-
     requester = service.get_user_by_id(payload.requester_user_id)
     requester_label = requester.get(
         "email") if requester else str(payload.requester_user_id)
-    # _send_email_notification(
-    #     recipients=list(admin_emails),
-    #     subject=f"[CSIS SmartAssist] New booking request {booking['id']}",
-    #     body=(
-    #         "A new booking request has been created.\n\n"
-    #         f"Request ID: {booking['id']}\n"
-    #         f"Requester: {requester_label}\n"
-    #         f"Resource: {booking['resource']}\n"
-    #         f"Date: {booking['date']}\n"
-    #         f"Time slot: {booking['time_slot']}\n"
-    #         f"Purpose: {booking['purpose']}\n"
-    #         f"Participants: {booking['participants']}\n"
-    #     ),
-    # )
 
     def _notify():
         try:
@@ -416,62 +394,68 @@ def decide_booking_request(
     payload: BookingRequestDecisionIn,
     service: SupabaseService = Depends(get_supabase_service),
 ) -> dict:
+    # 1. Get the current request data
     current_booking = service.get_booking_request_by_id(request_id)
-    calendar_event_link: str | None = None
+    if not current_booking:
+        raise HTTPException(status_code=404, detail="Booking request not found")
 
-    # Step 1: Try to create calendar event (non-blocking — failure is soft)
-    if payload.status == BookingStatus.accepted:
-        try:
-            start_time, end_time = _parse_booking_slot_to_utc(
-                date_value=str(current_booking["date"]),
-                time_slot=str(current_booking["time_slot"]),
-            )
-            calendar_service, calendar_id = get_calendar_client(settings)
-            calendar_event = create_event(
-                service=calendar_service,
-                calendarID=calendar_id,
-                start_time=start_time,
-                end_time=end_time,
-                title=f"Booking: {current_booking['location']}",
-                description=(
-                    f"Request ID: {current_booking['id']}\n"
-                    f"Purpose: {current_booking['purpose']}\n"
-                    f"Remarks: {payload.remarks or current_booking.get('remarks') or '-'}"
-                ),
-                location=current_booking["location"],
-            )
-            calendar_event_link = calendar_event.get("htmlLink")
-        except Exception as exc:
-            logger.error(f"[Calendar] Failed to create event for booking {request_id}: {exc}")
-            # Continue — status update and email should still happen
-
-    # Step 2: Update booking status in DB (this MUST succeed)
+    # Step 1: Update booking status in DB (this MUST succeed first to ensure persistence)
     updated_booking = service.decide_booking_request(
         request_id=request_id, payload=payload)
 
-    # Step 3: Send email notification (in background thread)
-    requester = service.get_user_by_id(updated_booking["requester_user_id"])
-    if requester and requester.get("email"):
-        decision_word = "approved" if payload.status == BookingStatus.accepted else "declined"
-        body = (
-            "Your CSIS SmartAssist booking request has been reviewed.\n\n"
-            f"Request ID: {updated_booking['id']}\n"
-            f"Status: {decision_word}\n"
-            f"Location: {updated_booking['location']}\n"
-            f"Date: {updated_booking['date']}\n"
-            f"Time slot: {updated_booking['time_slot']}\n"
-            f"Remarks: {payload.remarks or '-'}\n"
-        )
-        if calendar_event_link:
-            body += f"\nCalendar event: {calendar_event_link}\n"
-
-        def _notify_decision():
+    # Step 2: External notifications (Calendar + Email) in a background thread
+    def _background_notifications():
+        calendar_event_link = None
+        
+        # Try Google Calendar
+        if payload.status == BookingStatus.accepted:
             try:
+                start_time, end_time = _parse_booking_slot_to_utc(
+                    date_value=str(current_booking["date"]),
+                    time_slot=str(current_booking["time_slot"]),
+                )
+                calendar_service, calendar_id = get_calendar_client(settings)
+                calendar_event = create_event(
+                    service=calendar_service,
+                    calendarID=calendar_id,
+                    start_time=start_time,
+                    end_time=end_time,
+                    title=f"Booking: {current_booking['location']}",
+                    description=(
+                        f"Request ID: {current_booking['id']}\n"
+                        f"Purpose: {current_booking['purpose']}\n"
+                        f"Remarks: {payload.remarks or current_booking.get('remarks') or '-'}"
+                    ),
+                    location=current_booking["location"],
+                )
+                calendar_event_link = calendar_event.get("htmlLink")
+            except Exception as exc:
+                logger.error(f"[Calendar] Failed to create event for booking {request_id}: {exc}")
+
+        # Try Email Notifications
+        try:
+            requester = service.get_user_by_id(updated_booking["requester_user_id"])
+            if requester and requester.get("email"):
+                decision_word = "approved" if payload.status == BookingStatus.accepted else "declined"
+                body = (
+                    "Your CSIS SmartAssist booking request has been reviewed.\n\n"
+                    f"Request ID: {updated_booking['id']}\n"
+                    f"Status: {decision_word}\n"
+                    f"Location: {updated_booking['location']}\n"
+                    f"Date: {updated_booking['date']}\n"
+                    f"Time slot: {updated_booking['time_slot']}\n"
+                    f"Remarks: {payload.remarks or '-'}\n"
+                )
+                if calendar_event_link:
+                    body += f"\nCalendar event: {calendar_event_link}\n"
+
                 send_email(
                     email_receiver=requester["email"],
                     subject=f"[CSIS SmartAssist] Booking request {decision_word}",
                     body=body,
                 )
+                
+                # Notify Admin
                 if settings.admin_receiver_email:
                     send_email(
                         email_receiver=settings.admin_receiver_email,
@@ -486,15 +470,12 @@ def decide_booking_request(
                             f"Remarks: {payload.remarks or '-'}\n"
                         ),
                     )
-            except Exception as exc:
-                logger.error(f"[Email] Failed to send decision notification: {exc}")
+        except Exception as exc:
+            logger.error(f"[Email] Failed to send decision notification: {exc}")
 
-        threading.Thread(target=_notify_decision, daemon=True).start()
+    threading.Thread(target=_background_notifications, daemon=True).start()
 
-    if calendar_event_link:
-        updated_booking["calendar_event_link"] = calendar_event_link
-
-    # Step 4: Update related chat message metadata with booking status
+    # Step 3: Update related chat message metadata with booking status
     try:
         decision_status = "approved" if payload.status == BookingStatus.accepted else "declined"
         msg_resp = (
@@ -705,6 +686,8 @@ def calendar_nearby_slots(
             for slot_start, slot_end in free_slots
         ],
     }
+
+
 @app.post("/rag/ingest-drive")
 def ingest_drive_data(
     service: SupabaseService = Depends(get_supabase_service),
@@ -715,65 +698,42 @@ def ingest_drive_data(
         sync_local_rag_to_chromadb,
         sync_google_drive_rag_data
     )
-
-    local_summary: dict = {}
-    chroma_summary: dict = {}
-    drive_summary: dict | None = None
-    top_errors: list[str] = []
-
-    # 1. Local Sync (Supabase)
-    try:
-        local_summary = sync_local_rag_data_folder(
+    
+    # 1. Local Sync
+    local_summary = sync_local_rag_data_folder(
+        service=service,
+        data_dir=settings.rag_local_data_dir,
+        vector_dimensions=settings.vector_dimensions,
+    )
+    chroma_summary = sync_local_rag_to_chromadb(
+        data_dir=settings.rag_local_data_dir,
+        embedding_model=settings.embedding_model,
+    )
+    
+    # 2. Drive Sync (if configured)
+    drive_summary = None
+    if settings.google_drive_folder_id:
+        drive_summary = sync_google_drive_rag_data(
             service=service,
-            data_dir=settings.rag_local_data_dir,
+            folder_id=settings.google_drive_folder_id,
             vector_dimensions=settings.vector_dimensions,
-        )
-    except Exception as exc:
-        logger.error(f"[RAG Ingest] Local sync failed: {exc}")
-        top_errors.append(f"Local sync failed: {exc}")
-
-    # 2. ChromaDB Sync
-    try:
-        chroma_summary = sync_local_rag_to_chromadb(
-            data_dir=settings.rag_local_data_dir,
             embedding_model=settings.embedding_model,
         )
-    except Exception as exc:
-        logger.error(f"[RAG Ingest] ChromaDB sync failed: {exc}")
-        top_errors.append(f"ChromaDB sync failed: {exc}")
-
-    # 3. Drive Sync (if configured)
-    if settings.google_drive_folder_id:
-        try:
-            drive_summary = sync_google_drive_rag_data(
-                service=service,
-                folder_id=settings.google_drive_folder_id,
-                vector_dimensions=settings.vector_dimensions,
-                embedding_model=settings.embedding_model,
-            )
-        except Exception as exc:
-            logger.error(f"[RAG Ingest] Drive sync failed: {exc}")
-            top_errors.append(f"Drive sync failed: {exc}")
-
+    
     # Merge summaries for frontend
-    combined_errors = (
-        top_errors
-        + local_summary.get("errors", [])
-        + chroma_summary.get("errors", [])
-        + (drive_summary.get("errors", []) if drive_summary else [])
-    )
-
+    combined_errors = (local_summary.get("errors", []) + 
+                       chroma_summary.get("errors", []) + 
+                       (drive_summary.get("errors", []) if drive_summary else []))
+    
     return {
         "folder_id": settings.google_drive_folder_id or "local",
         "processed_files": local_summary.get("processed_files", 0) + (drive_summary.get("processed_files", 0) if drive_summary else 0),
         "ingested_files": local_summary.get("ingested_files", 0) + (drive_summary.get("ingested_files", 0) if drive_summary else 0),
-        "chunks_written": chroma_summary.get("chunks_stored", 0) + local_summary.get("chunks_written", 0),
+        "chunks_written": local_summary.get("chunks_written", 0) + (drive_summary.get("chunks_written", 0) if drive_summary else 0),
         "errors": combined_errors,
         "details": {
             "local": local_summary,
             "chromadb": chroma_summary,
-            "drive": drive_summary,
-        },
+            "drive": drive_summary
+        }
     }
-
-

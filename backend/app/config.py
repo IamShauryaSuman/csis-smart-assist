@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     embedding_model: str = "nomic-embed-text"
     use_gemini: bool = True
     gemini_api_key: str | None = None
+    google_calendar_id: str | None = None
     google_calendar_token_path: str | None = None
     google_calendar_token: str | None = None
     google_calendar_refresh_token: str | None = None
@@ -38,6 +39,7 @@ class Settings(BaseSettings):
     admin_seed_emails: str = ""
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 465
+    google_sender_email: str | None = None
     smtp_sender_email: str | None = None
     smtp_sender_password: str | None = None
     admin_receiver_email: str | None = None
