@@ -6,6 +6,9 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import requests
+import logging
+
+logger = logging.getLogger(__name__)
 from fastapi import HTTPException
 
 from calender.client import get_calendar_client, parse_start_iso
@@ -28,20 +31,92 @@ class ChatService:
     def __init__(self, settings: Settings, supabase_service: SupabaseService) -> None:
         self.settings = settings
         self.supabase_service = supabase_service
-        # Initialize embedding model lazily
-        self._embedding_model = None
-
-    def _get_embedding_model(self):
-        """Lazily initialize the embedding model."""
-        if self._embedding_model is None:
-            from sentence_transformers import SentenceTransformer
-            self._embedding_model = SentenceTransformer(self.settings.embedding_model)
-        return self._embedding_model
 
     def _embed_query(self, text: str) -> list[float]:
-        """Generate embeddings using local sentence transformer."""
-        model = self._get_embedding_model()
-        return model.encode(text).tolist()
+        """Generate embeddings using either Gemini (cloud) or Ollama (local)."""
+        if self.settings.use_gemini and self.settings.gemini_api_key:
+            return self._embed_query_google(text)
+        return self._embed_query_ollama(text)
+
+    def _embed_query_google(self, text: str) -> list[float]:
+        """Generate embeddings using Google's Generative AI API."""
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=self.settings.gemini_api_key)
+            result = genai.embed_content(
+                model="models/embedding-001",
+                content=text,
+                task_type="retrieval_query",
+            )
+            return result["embedding"]
+        except Exception as exc:
+            logger.error(f"[Gemini Embed] Error: {exc}")
+            return [0.0] * self.settings.vector_dimensions
+
+    def _embed_query_ollama(self, text: str) -> list[float]:
+        """Generate embeddings using Ollama's embedding API."""
+        try:
+            response = requests.post(
+                f"{self.settings.ollama_base_url}/api/embed",
+                json={
+                    "model": self.settings.embedding_model,
+                    "input": text,
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+            # Ollama returns {"embeddings": [[...]]} for /api/embed
+            embeddings = data.get("embeddings") or data.get("embedding")
+            if isinstance(embeddings, list) and len(embeddings) > 0:
+                if isinstance(embeddings[0], list):
+                    return embeddings[0]
+                return embeddings
+            raise ValueError(f"Unexpected Ollama embed response: {data}")
+        except Exception as exc:
+            logger.error(f"[Ollama Embed] Error: {exc}")
+            return []
+
+    def _call_llm(self, prompt: str) -> str:
+        """Call the LLM (Gemini if use_gemini is True, else Ollama)."""
+        if self.settings.use_gemini and self.settings.gemini_api_key:
+            return self._call_gemini(prompt)
+        return self._call_ollama(prompt)
+
+    def _call_gemini(self, prompt: str) -> str:
+        """Call the Google Gemini API."""
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=self.settings.gemini_api_key)
+            # Use the model name from settings or a default
+            model_name = self.settings.ollama_model.split(":")[0] if ":" in self.settings.ollama_model else "gemini-1.5-flash"
+            if "gemma" in model_name.lower():
+                model_name = "gemini-1.5-flash"
+            
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as exc:
+            logger.error(f"[Gemini] Error: {exc}")
+            return "Error calling Gemini API. Please check your credentials."
+
+    def _call_ollama(self, prompt: str) -> str:
+        """Call the Ollama API."""
+        try:
+            response = requests.post(
+                f"{self.settings.ollama_base_url}/api/generate",
+                json={
+                    "model": self.settings.ollama_model,
+                    "prompt": prompt,
+                    "stream": False,
+                },
+                timeout=60,
+            )
+            response.raise_for_status()
+            return response.json().get("response", "")
+        except Exception as exc:
+            logger.error(f"[Ollama] Error: {exc}")
+            return "I'm having trouble connecting to my local AI core."
 
     # ── Memory helpers ─────────────────────────────────────────────────
     def _get_memory(self, user_id: str) -> dict[str, Any]:
@@ -384,28 +459,25 @@ User message:
 
         return {"intent": "info_query"}
 
-    def _generate_answer(self, prompt: str) -> str:
+    def _search_context(self, query_embedding: list[float]) -> list[dict[str, Any]]:
+        """Search for context using ChromaDB (local) or Supabase (cloud)."""
+        # 1. Try local ChromaDB first
         try:
-            response = requests.post(
-                f"{self.settings.ollama_base_url}/api/generate",
-                json={
-                    "model": self.settings.ollama_model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.7,
-                        "top_p": 0.9,
-                        "num_predict": 512
-                    }
-                },
-                timeout=30
-            )
-            response.raise_for_status()
-            result = response.json()
-            return result.get("response", "").strip()
-        except requests.exceptions.RequestException as e:
-            print(f"[Ollama] Error: {e}")
-            return "__LLM_UNAVAILABLE__"
+            from .rag_store import search_rag_collection
+            matches = search_rag_collection(query_embedding=query_embedding)
+            if matches:
+                return matches
         except Exception as exc:
-            print(f"[Ollama] Unexpected error: {exc}")
-            return "__LLM_UNAVAILABLE__"
+            logger.warning(f"[ChromaDB] Search failed or empty, trying Supabase: {exc}")
+
+        # 2. Fallback to Supabase Vector
+        try:
+            return self.supabase_service.search_rag_chunks_by_embedding(query_embedding)
+        except Exception as exc:
+            logger.error(f"[Supabase RAG] Search failed: {exc}")
+            return []
+
+    def _generate_answer(self, prompt: str) -> str:
+        return self._call_llm(prompt)
+
+

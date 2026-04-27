@@ -252,6 +252,130 @@ class SupabaseService:
                 status_code=404, detail="Booking request not found")
         return response.data[0]
 
+    def upsert_rag_document_by_source(
+        self,
+        title: str,
+        source_uri: str,
+        metadata: dict | None = None,
+    ) -> dict:
+        """Upsert a RAG document by its source_uri."""
+        response = (
+            self.client.table("rag_documents")
+            .upsert(
+                {
+                    "title": title,
+                    "source_uri": source_uri,
+                    "metadata": metadata or {},
+                },
+                on_conflict="source_uri",
+            )
+            .execute()
+        )
+        if not response.data:
+            raise HTTPException(
+                status_code=500, detail="Failed to upsert RAG document"
+            )
+        return response.data[0]
+
+    def replace_rag_chunks_for_document(
+        self,
+        document_id: str,
+        chunks: list[str],
+        embedding: list[float] | None = None,
+        metadata: dict | None = None,
+    ) -> int:
+        """Delete old chunks and insert new ones for a document."""
+        # Delete old chunks
+        self.client.table("rag_chunks").delete().eq("document_id", document_id).execute()
+
+        if not chunks:
+            return 0
+
+        # Insert new chunks
+        rows = []
+        for index, content in enumerate(chunks):
+            row = {
+                "document_id": document_id,
+                "content": content,
+                "metadata": {
+                    **(metadata or {}),
+                    "chunk_index": index,
+                },
+            }
+            if embedding:
+                row["embedding"] = self._to_vector_literal(embedding)
+            rows.append(row)
+
+        response = self.client.table("rag_chunks").insert(rows).execute()
+        return len(response.data) if response.data else 0
+
+    def create_rag_document(self, payload: Any) -> dict:
+        response = (
+            self.client.table("rag_documents")
+            .insert({
+                "title": payload.title,
+                "source": payload.source,
+                "metadata": payload.metadata,
+            })
+            .execute()
+        )
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create RAG document")
+        return response.data[0]
+
+    def create_rag_chunk(self, payload: Any) -> dict:
+        response = (
+            self.client.table("rag_chunks")
+            .insert({
+                "document_id": payload.document_id,
+                "content": payload.content,
+                "embedding": payload.embedding,
+                "metadata": payload.metadata,
+            })
+            .execute()
+        )
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create RAG chunk")
+        return response.data[0]
+
+    def search_rag_chunks_by_embedding(self, embedding: list[float], match_count: int = 5) -> list[dict]:
+        """Search for RAG chunks in Supabase using vector similarity."""
+        try:
+            response = self.client.rpc(
+                "match_rag_chunks",
+                {
+                    "query_embedding": self._to_vector_literal(embedding),
+                    "match_count": match_count,
+                },
+            ).execute()
+            
+            # Format results to match ChromaDB structure
+            matches = []
+            for row in (response.data or []):
+                matches.append({
+                    "content": row.get("content"),
+                    "metadata": row.get("metadata", {}),
+                    "similarity": row.get("similarity"),
+                    "document_id": row.get("metadata", {}).get("source_uri")
+                })
+            return matches
+        except Exception as exc:
+            logger.error(f"[Supabase Search] Error: {exc}")
+            return []
+
+    def search_rag_chunks(self, payload: Any) -> list[dict]:
+        try:
+            response = self.client.rpc(
+                "match_rag_chunks",
+                {
+                    "query_embedding": self._to_vector_literal(payload.embedding),
+                    "match_count": payload.match_count,
+                },
+            ).execute()
+            return response.data or []
+        except Exception:
+            return []
+
     @staticmethod
     def _to_vector_literal(embedding: list[float]) -> str:
         return "[" + ",".join(str(value) for value in embedding) + "]"

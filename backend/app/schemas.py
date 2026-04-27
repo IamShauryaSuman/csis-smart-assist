@@ -37,6 +37,19 @@ class BookingRequestDecisionIn(BaseModel):
     remarks: str | None = Field(default=None, max_length=1000)
 
 
+class RagDocumentCreateIn(BaseModel):
+    title: str = Field(min_length=1)
+    source: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RagChunkCreateIn(BaseModel):
+    document_id: str = Field(min_length=1)
+    content: str = Field(min_length=1)
+    embedding: list[float] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class RagSearchIn(BaseModel):
     embedding: list[float]
     match_count: int = Field(default=5, ge=1, le=50)

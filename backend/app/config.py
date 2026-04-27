@@ -14,13 +14,27 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "gemma2:2b"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    google_calendar_id: str | None = None
+    use_gemini: bool = True
+    gemini_api_key: str | None = None
     google_calendar_token_path: str | None = None
     google_calendar_token: str | None = None
     google_calendar_refresh_token: str | None = None
     google_calendar_token_uri: str = "https://oauth2.googleapis.com/token"
     google_calendar_client_id: str | None = None
     google_calendar_client_secret: str | None = None
+    google_calendar_service_account_path: str | None = None
+    google_calendar_service_account_json: str | None = None
+    google_calendar_subject: str | None = None
+    
+    # Generic Google OAuth (often used for Drive)
+    google_token: str | None = None
+    google_refresh_token: str | None = None
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_token_uri: str = "https://oauth2.googleapis.com/token"
+    google_token_path: str | None = None
+    
+    google_drive_folder_id: str | None = None
     admin_seed_emails: str = ""
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 465

@@ -21,16 +21,23 @@ def resolve_rag_db_path(db_path: str | Path | None = None) -> str:
     return str((Path(__file__).resolve().parents[1] / candidate).resolve())
 
 
+_chroma_client = None
+
+
 def get_rag_collection(
     db_path: str | Path | None = None,
     collection_name: str = RAG_COLLECTION_NAME,
 ):
+    global _chroma_client
     if chromadb is None:
         raise RuntimeError("chromadb is not installed")
 
     os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
-    client = chromadb.PersistentClient(path=resolve_rag_db_path(db_path))
-    return client.get_or_create_collection(name=collection_name)
+    
+    if _chroma_client is None:
+        _chroma_client = chromadb.PersistentClient(path=resolve_rag_db_path(db_path))
+    
+    return _chroma_client.get_or_create_collection(name=collection_name)
 
 
 def get_source_metadata(

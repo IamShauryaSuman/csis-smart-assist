@@ -28,11 +28,56 @@ except Exception:  # pragma: no cover
     chromadb = None
 
 
-def _local_embed(texts: list[str], model_name: str = "sentence-transformers/all-MiniLM-L6-v2") -> list[list[float]]:
-    """Generate embeddings using local sentence transformer."""
-    from sentence_transformers import SentenceTransformer
-    model = SentenceTransformer(model_name)
-    return model.encode(texts).tolist()
+def _get_embeddings(texts: list[str], use_gemini: bool = False, gemini_key: str = None, model_name: str = "nomic-embed-text", ollama_url: str = "http://localhost:11434") -> list[list[float]]:
+    """Generate embeddings using either Gemini (cloud) or Ollama (local)."""
+    if use_gemini and gemini_key:
+        return _google_embed(texts, gemini_key)
+    return _ollama_embed(texts, model_name, ollama_url)
+
+
+def _google_embed(texts: list[str], api_key: str) -> list[list[float]]:
+    """Generate embeddings using Google's Generative AI API."""
+    import google.generativeai as genai
+    genai.configure(api_key=api_key)
+    
+    # Google supports batching
+    try:
+        result = genai.embed_content(
+            model="models/embedding-001",
+            content=texts,
+            task_type="retrieval_document",
+        )
+        return result["embedding"]
+    except Exception as exc:
+        print(f"[Gemini Embed] Failed: {exc}")
+        return [[0.0] * 768 for _ in texts]
+
+
+def _ollama_embed(texts: list[str], model_name: str = "nomic-embed-text", ollama_url: str = "http://localhost:11434") -> list[list[float]]:
+    """Generate embeddings using Ollama's embedding API."""
+    import requests
+
+    embeddings = []
+    # Batch in groups of 10 to avoid overwhelming Ollama
+    batch_size = 10
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i + batch_size]
+        try:
+            response = requests.post(
+                f"{ollama_url}/api/embed",
+                json={"model": model_name, "input": batch},
+                timeout=120,
+            )
+            response.raise_for_status()
+            data = response.json()
+            batch_embeddings = data.get("embeddings", [])
+            embeddings.extend(batch_embeddings)
+        except Exception as exc:
+            print(f"[Ollama Embed] Batch {i//batch_size} failed: {exc}")
+            # Return zero vectors as fallback
+            dim = 768
+            embeddings.extend([[0.0] * dim for _ in batch])
+    return embeddings
 
 
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".html", ".htm", ".txt", ".md"}
@@ -206,11 +251,11 @@ def sync_local_rag_to_chromadb(
     db_path: str = "./RAG_db",
     chunk_size: int = 140,
     overlap: int = 30,
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+    embedding_model: str = "nomic-embed-text",
 ) -> dict[str, Any]:
-    """Ingest local documents into ChromaDB with local embeddings.
+    """Ingest local documents into ChromaDB with Ollama embeddings.
 
-    Uses sentence-transformers for embeddings.
+    Uses Ollama's embedding API for embeddings.
     """
     summary: dict[str, Any] = {
         "data_dir": data_dir,
@@ -229,14 +274,18 @@ def sync_local_rag_to_chromadb(
         summary["errors"].append(f"Data directory not found: {base_path}")
         return summary
 
-    client = chromadb.PersistentClient(path=db_path)
-    collection = client.get_or_create_collection(name=collection_name)
+    from .rag_store import get_rag_collection
+    try:
+        collection = get_rag_collection(db_path=db_path, collection_name=collection_name)
+    except Exception as exc:
+        summary["errors"].append(f"Failed to get ChromaDB collection: {exc}")
+        return summary
+
 
     # If collection already has data, skip re-ingestion
     if collection.count() > 0:
         summary["chunks_stored"] = collection.count()
-        summary["errors"].append(
-            "Collection already populated; skipping ingestion")
+        summary["status"] = "Collection already populated; skipping ingestion"
         return summary
 
     all_chunks: list[str] = []
@@ -268,7 +317,15 @@ def sync_local_rag_to_chromadb(
 
     if all_chunks:
         try:
-            embeddings = _local_embed(all_chunks, embedding_model)
+            from .config import get_settings
+            settings = get_settings()
+            embeddings = _get_embeddings(
+                texts=all_chunks,
+                use_gemini=settings.use_gemini,
+                gemini_key=settings.gemini_api_key,
+                model_name=embedding_model,
+                ollama_url=settings.ollama_base_url
+            )
         except Exception as exc:
             summary["errors"].append(f"Embedding failed: {exc}")
             return summary
@@ -278,5 +335,174 @@ def sync_local_rag_to_chromadb(
             ids=all_ids,
         )
         summary["chunks_stored"] = len(all_chunks)
+
+    return summary
+from .google_client import get_google_drive_client
+
+
+def sync_google_drive_rag_data(
+    service: SupabaseService,
+    folder_id: str,
+    vector_dimensions: int,
+    embedding_model: str = "nomic-embed-text",
+    db_path: str = "./RAG_db",
+) -> dict[str, Any]:
+    """Sync documents from a Google Drive folder to Supabase and ChromaDB."""
+    from .config import get_settings
+    settings = get_settings()
+
+    summary: dict[str, Any] = {
+        "folder_id": folder_id,
+        "processed_files": 0,
+        "ingested_files": 0,
+        "chunks_written": 0,
+        "errors": [],
+    }
+
+    try:
+        drive_service = get_google_drive_client(settings)
+    except Exception as exc:
+        summary["errors"].append(f"Failed to initialize Drive client: {exc}")
+        return summary
+
+    try:
+        # List files in the folder
+        query = f"'{folder_id}' in parents and trashed = false"
+        results = drive_service.files().list(
+            q=query, fields="files(id, name, mimeType, md5Checksum)"
+        ).execute()
+        files = results.get("files", [])
+    except Exception as exc:
+        summary["errors"].append(f"Failed to list files from Drive: {exc}")
+        return summary
+
+    if not files:
+        summary["errors"].append(f"No files found in Drive folder: {folder_id}")
+        return summary
+
+    # Initialize ChromaDB
+    from .rag_store import get_rag_collection
+    try:
+        collection = get_rag_collection(db_path=db_path, collection_name="RAG_db")
+    except Exception as exc:
+        summary["errors"].append(f"Failed to get ChromaDB collection: {exc}")
+        return summary
+
+
+    default_embedding = [0.0] * vector_dimensions
+
+    for file in files:
+        file_id = file["id"]
+        file_name = file["name"]
+        mime_type = file["mimeType"]
+        content_hash = file.get("md5Checksum", file_id)
+
+        # Check extension/mime
+        is_supported = False
+        for ext in SUPPORTED_EXTENSIONS:
+            if file_name.lower().endswith(ext):
+                is_supported = True
+                break
+        
+        if not is_supported and "text" not in mime_type and "pdf" not in mime_type and "document" not in mime_type:
+            continue
+
+        summary["processed_files"] += 1
+        try:
+            source_uri = f"gdrive://{file_id}"
+
+            # Check if already ingested in Supabase
+            existing = (
+                service.client.table("rag_documents")
+                .select("id,metadata")
+                .eq("source_uri", source_uri)
+                .limit(1)
+                .execute()
+            )
+            existing_row = existing.data[0] if existing.data else None
+            existing_hash = ((existing_row or {}).get("metadata") or {}).get("content_hash")
+
+            # We'll skip if hash matches (optional optimization)
+            # if existing_hash == content_hash:
+            #     continue
+
+            # Download file
+            if "google-apps.document" in mime_type:
+                # Export Google Docs as PDF
+                raw = drive_service.files().export(
+                    fileId=file_id, mimeType="application/pdf"
+                ).execute()
+                mime_type = "application/pdf"
+            else:
+                raw = drive_service.files().get_media(fileId=file_id).execute()
+
+            text = _extract_text(raw, mime_type)
+            if not text.strip():
+                summary["errors"].append(f"No text extracted from {file_name}")
+                continue
+
+            chunks = _chunk_text(text)
+            if not chunks:
+                summary["errors"].append(f"No chunks created from {file_name}")
+                continue
+
+            # Sync to Supabase
+            document = service.upsert_rag_document_by_source(
+                title=file_name,
+                source_uri=source_uri,
+                metadata={
+                    "ingest_source": "google_drive",
+                    "file_id": file_id,
+                    "content_hash": content_hash,
+                    "updated_at": datetime.now(UTC).isoformat(),
+                },
+            )
+
+            written = service.replace_rag_chunks_for_document(
+                document_id=document["id"],
+                chunks=chunks,
+                embedding=default_embedding,
+                metadata={
+                    "file_id": file_id,
+                    "ingest_source": "google_drive",
+                },
+            )
+
+            # Sync to ChromaDB
+            # (In a real app, we'd use better embeddings, but using _local_embed for consistency)
+            try:
+                from .config import get_settings
+                settings = get_settings()
+                embeddings = _get_embeddings(
+                    texts=chunks,
+                    use_gemini=settings.use_gemini,
+                    gemini_key=settings.gemini_api_key,
+                    model_name=embedding_model,
+                    ollama_url=settings.ollama_base_url
+                )
+                # For Chroma, we use source_uri as prefix for IDs
+                ids = [f"{source_uri}::{i}" for i in range(len(chunks))]
+                
+                # Clear old chunks for this source in Chroma
+                collection.delete(where={"source_uri": source_uri})
+                
+                collection.add(
+                    embeddings=embeddings,
+                    documents=chunks,
+                    ids=ids,
+                    metadatas=[{
+                        "source_uri": source_uri,
+                        "title": file_name,
+                        "chunk_index": i,
+                        "ingest_source": "google_drive"
+                    } for i in range(len(chunks))]
+                )
+            except Exception as exc:
+                summary["errors"].append(f"ChromaDB sync failed for {file_name}: {exc}")
+
+            summary["ingested_files"] += 1
+            summary["chunks_written"] += written
+        except Exception as exc:
+            summary["errors"].append(f"{file_name}: {exc}")
 
     return summary

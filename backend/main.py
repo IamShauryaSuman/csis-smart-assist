@@ -48,7 +48,11 @@ def _run_rag_ingest() -> None:
     os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
 
     try:
-        from app.rag_local_ingest import sync_local_rag_data_folder, sync_local_rag_to_chromadb
+        from app.rag_local_ingest import (
+            sync_local_rag_data_folder,
+            sync_local_rag_to_chromadb,
+            sync_google_drive_rag_data
+        )
     except Exception as exc:
         print(f"[RAG] Failed to import rag_local_ingest: {exc}")
         return
@@ -584,3 +588,54 @@ def calendar_nearby_slots(
             for slot_start, slot_end in free_slots
         ],
     }
+@app.post("/rag/ingest-drive")
+def ingest_drive_data(
+    service: SupabaseService = Depends(get_supabase_service),
+) -> dict:
+    """Trigger a manual sync of RAG data from both local folder and Google Drive."""
+    from app.rag_local_ingest import (
+        sync_local_rag_data_folder,
+        sync_local_rag_to_chromadb,
+        sync_google_drive_rag_data
+    )
+    
+    # 1. Local Sync
+    local_summary = sync_local_rag_data_folder(
+        service=service,
+        data_dir=settings.rag_local_data_dir,
+        vector_dimensions=settings.vector_dimensions,
+    )
+    chroma_summary = sync_local_rag_to_chromadb(
+        data_dir=settings.rag_local_data_dir,
+        embedding_model=settings.embedding_model,
+    )
+    
+    # 2. Drive Sync (if configured)
+    drive_summary = None
+    if settings.google_drive_folder_id:
+        drive_summary = sync_google_drive_rag_data(
+            service=service,
+            folder_id=settings.google_drive_folder_id,
+            vector_dimensions=settings.vector_dimensions,
+            embedding_model=settings.embedding_model,
+        )
+    
+    # Merge summaries for frontend
+    combined_errors = (local_summary.get("errors", []) + 
+                       chroma_summary.get("errors", []) + 
+                       (drive_summary.get("errors", []) if drive_summary else []))
+    
+    return {
+        "folder_id": settings.google_drive_folder_id or "local",
+        "processed_files": local_summary.get("processed_files", 0) + (drive_summary.get("processed_files", 0) if drive_summary else 0),
+        "ingested_files": local_summary.get("ingested_files", 0) + (drive_summary.get("ingested_files", 0) if drive_summary else 0),
+        "chunks_written": local_summary.get("chunks_written", 0) + (drive_summary.get("chunks_written", 0) if drive_summary else 0),
+        "errors": combined_errors,
+        "details": {
+            "local": local_summary,
+            "chromadb": chroma_summary,
+            "drive": drive_summary
+        }
+    }
+
+
