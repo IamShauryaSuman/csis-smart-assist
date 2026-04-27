@@ -41,7 +41,7 @@ def _google_embed(texts: list[str], api_key: str) -> list[list[float]]:
     genai.configure(api_key=api_key)
     try:
         result = genai.embed_content(
-            model="models/text-embedding-004",
+            model="models/embedding-001",
             content=texts,
             task_type="retrieval_document",
             output_dimensionality=768,
