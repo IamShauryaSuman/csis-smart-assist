@@ -112,6 +112,9 @@ function HomePage() {
   const [actionedMessageIds, setActionedMessageIds] = useState<Set<string>>(
     new Set(),
   );
+  const [isIngesting, setIsIngesting] = useState(false);
+  const [lastIngestSummary, setLastIngestSummary] = useState<any | null>(null);
+  const [ingestError, setIngestError] = useState<string | null>(null);
   const [bookingPurposes, setBookingPurposes] = useState<
     Record<string, string>
   >({});
@@ -217,17 +220,14 @@ function HomePage() {
 
       // Persist confirmation message to backend
       if (activeChatId) {
-        await fetch(
-          `${backendUrl}/chat/sessions/${activeChatId}/messages`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              role: "assistant",
-              content: confirmationMessage,
-            }),
-          },
-        ).catch((err) =>
+        await fetch(`${backendUrl}/chat/sessions/${activeChatId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            role: "assistant",
+            content: confirmationMessage,
+          }),
+        }).catch((err) =>
           console.error("Failed to persist confirmation message:", err),
         );
       }
@@ -249,22 +249,20 @@ function HomePage() {
       }
     } catch (err) {
       console.error("Booking creation error:", err);
-      const errorMessage = "I could not create the booking request right now. Please try again.";
+      const errorMessage =
+        "I could not create the booking request right now. Please try again.";
       appendAssistantMessage(errorMessage);
-      
+
       // Also persist error message to backend
       if (activeChatId) {
-        await fetch(
-          `${backendUrl}/chat/sessions/${activeChatId}/messages`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              role: "assistant",
-              content: errorMessage,
-            }),
-          },
-        ).catch((err) =>
+        await fetch(`${backendUrl}/chat/sessions/${activeChatId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            role: "assistant",
+            content: errorMessage,
+          }),
+        }).catch((err) =>
           console.error("Failed to persist error message:", err),
         );
       }
@@ -723,6 +721,68 @@ function HomePage() {
               Review pending requests and add remarks before accepting or
               declining.
             </p>
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    try {
+                      setIsIngesting(true);
+                      setIngestError(null);
+                      const resp = await fetch(
+                        `${backendUrl}/rag/ingest-drive`,
+                        {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({}),
+                        },
+                      );
+                      if (!resp.ok) {
+                        const text = await resp.text().catch(() => "");
+                        throw new Error(text || `Status ${resp.status}`);
+                      }
+                      const summary = await resp.json();
+                      setLastIngestSummary(summary);
+                    } catch (err: any) {
+                      setIngestError(err?.message || String(err));
+                    } finally {
+                      setIsIngesting(false);
+                    }
+                  }}
+                  disabled={isIngesting}
+                  className="border border-accent px-3 py-2 font-mono text-xs text-accent transition hover:bg-accent/10 disabled:opacity-60"
+                >
+                  {isIngesting ? "Running..." : "Run Drive Ingest"}
+                </button>
+              </div>
+              <div className="text-sm text-text-secondary">
+                {ingestError ? (
+                  <span className="text-danger">{ingestError}</span>
+                ) : null}
+              </div>
+            </div>
+            {lastIngestSummary && (
+              <div className="mt-3 rounded border border-border bg-bg-base p-3 text-sm">
+                <p>Folder: {lastIngestSummary.folder_id ?? "(server)"}</p>
+                <p>Processed: {lastIngestSummary.processed_files}</p>
+                <p>Ingested: {lastIngestSummary.ingested_files}</p>
+                <p>Chunks written: {lastIngestSummary.chunks_written}</p>
+                {lastIngestSummary.errors &&
+                  lastIngestSummary.errors.length > 0 && (
+                    <details className="mt-2 text-xs text-text-secondary">
+                      <summary>
+                        Errors ({lastIngestSummary.errors.length})
+                      </summary>
+                      <ul className="list-disc pl-4">
+                        {lastIngestSummary.errors.map(
+                          (e: string, i: number) => (
+                            <li key={i}>{e}</li>
+                          ),
+                        )}
+                      </ul>
+                    </details>
+                  )}
+              </div>
+            )}
           </div>
 
           <div className="ui-scrollbar max-h-[calc(100vh-190px)] space-y-3 overflow-y-auto pr-1">

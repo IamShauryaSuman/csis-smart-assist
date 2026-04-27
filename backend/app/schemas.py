@@ -37,23 +37,15 @@ class BookingRequestDecisionIn(BaseModel):
     remarks: str | None = Field(default=None, max_length=1000)
 
 
-class RagDocumentCreateIn(BaseModel):
-    title: str = Field(min_length=2, max_length=250)
-    source_uri: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class RagChunkCreateIn(BaseModel):
-    document_id: UUID
-    chunk_index: int = Field(ge=0)
-    content: str = Field(min_length=1)
-    embedding: list[float]
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
 class RagSearchIn(BaseModel):
     embedding: list[float]
     match_count: int = Field(default=5, ge=1, le=50)
+
+
+class RagDriveIngestIn(BaseModel):
+    folder_id: str | None = Field(default=None, min_length=1)
+    recursive: bool = True
+    max_files: int = Field(default=500, ge=1, le=5000)
 
 
 class ChatRequestIn(BaseModel):

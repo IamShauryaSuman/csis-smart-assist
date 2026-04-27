@@ -1,11 +1,6 @@
-import os
 from datetime import timezone
 from datetime import timedelta, timezone
 from zoneinfo import ZoneInfo
-import smtplib
-from email.message import EmailMessage
-from dotenv import load_dotenv
-load_dotenv()
 
 ist = ZoneInfo("Asia/Kolkata")
 
@@ -125,25 +120,3 @@ def create_event(
     ).execute()
 
     return created_event
-
-
-def send_email(body, email_receiver, subject, html=None):
-    EMAIL = os.getenv("EMAIL_SENDER")
-    APP_PASSWORD = os.getenv("APP_PASSWORD")
-    if not EMAIL or not APP_PASSWORD:
-        print("[Email] EMAIL_SENDER or APP_PASSWORD not configured, skipping")
-        return
-
-    msg = EmailMessage()
-    msg["From"] = EMAIL
-    msg["To"] = email_receiver
-    msg["Subject"] = subject
-    msg.set_content(body)
-    if html:
-        msg.add_alternative(html, subtype="html")
-
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=5) as server:
-        server.login(EMAIL, APP_PASSWORD)
-        server.send_message(msg)
-
-    print(f"✅ Email sent to {email_receiver}")

@@ -18,6 +18,8 @@ Create `.env.local` in `frontend/` with:
 - `NEXTAUTH_SECRET`
 - `NEXTAUTH_URL` (for local: `http://localhost:3000`)
 
+Use the same Google OAuth client (`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`) in backend and frontend so one Google Cloud app manages sign-in and backend Google APIs.
+
 ### 3) Run
 
 ```bash

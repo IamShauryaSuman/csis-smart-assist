@@ -41,57 +41,6 @@ create table if not exists public.booking_requests (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
-create table if not exists public.rag_documents (
-  id uuid primary key default gen_random_uuid(),
-  title text not null,
-  source_uri text,
-  metadata jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default timezone('utc', now())
-);
-
-create table if not exists public.rag_chunks (
-  id uuid primary key default gen_random_uuid(),
-  document_id uuid not null references public.rag_documents(id) on delete cascade,
-  chunk_index integer not null,
-  content text not null,
-  embedding vector(1536) not null,
-  metadata jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default timezone('utc', now())
-);
-
-create index if not exists rag_chunks_document_id_idx on public.rag_chunks(document_id);
-create index if not exists rag_chunks_embedding_cosine_idx
-on public.rag_chunks
-using ivfflat (embedding vector_cosine_ops)
-with (lists = 100);
-
-create or replace function public.match_rag_chunks(
-  query_embedding vector(1536),
-  match_count int default 5
-)
-returns table (
-  id uuid,
-  document_id uuid,
-  chunk_index integer,
-  content text,
-  metadata jsonb,
-  similarity double precision
-)
-language sql
-stable
-as $$
-  select
-    rag_chunks.id,
-    rag_chunks.document_id,
-    rag_chunks.chunk_index,
-    rag_chunks.content,
-    rag_chunks.metadata,
-    1 - (rag_chunks.embedding <=> query_embedding) as similarity
-  from public.rag_chunks
-  order by rag_chunks.embedding <=> query_embedding
-  limit match_count;
-$$;
-
 -- ── Chat history ──────────────────────────────────────────────────────
 create table if not exists public.chat_sessions (
   id uuid primary key default gen_random_uuid(),
