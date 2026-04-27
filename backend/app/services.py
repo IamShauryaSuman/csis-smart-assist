@@ -179,10 +179,10 @@ class SupabaseService:
         email: str,
         admin_seed_emails: set[str] | None = None,
     ) -> list[str]:
-        self.assign_role(user_id=user_id, role_name="user")
-
         if admin_seed_emails and email.lower() in admin_seed_emails:
             self.assign_role(user_id=user_id, role_name="admin")
+        else:
+            self.assign_role(user_id=user_id, role_name="user")
 
         return self.list_user_roles(user_id=user_id)["roles"]
 

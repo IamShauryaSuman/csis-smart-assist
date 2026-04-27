@@ -96,6 +96,7 @@ const formatHistoryTime = (isoDate: string) => {
 function HomePage() {
   const { data: session, status } = useSession();
   const [userRoles, setUserRoles] = useState<string[]>([]);
+  const [isRolesLoading, setIsRolesLoading] = useState(false);
   const [syncedUserId, setSyncedUserId] = useState<string | null>(null);
   const isAdmin = userRoles.includes("admin");
 
@@ -285,6 +286,7 @@ function HomePage() {
       return;
     }
     const syncSessionUser = async () => {
+      setIsRolesLoading(true);
       try {
         const response = await fetch(`${backendUrl}/users/sync-session`, {
           method: "POST",
@@ -301,6 +303,8 @@ function HomePage() {
       } catch {
         setSyncedUserId(null);
         setUserRoles([]);
+      } finally {
+        setIsRolesLoading(false);
       }
     };
     syncSessionUser();
@@ -423,7 +427,7 @@ function HomePage() {
             return next;
           });
         }
-      } catch {}
+      } catch { }
     };
 
     loadMessages();
@@ -449,7 +453,7 @@ function HomePage() {
             status: request.status,
           })),
         );
-      } catch {}
+      } catch { }
     };
 
     loadRequests();
@@ -485,7 +489,7 @@ function HomePage() {
       setChatSessions((previous) => [newChat, ...previous]);
       setActiveChatId(newChat.id);
       setInput("");
-    } catch {}
+    } catch { }
   };
 
   const handleSendMessage = (event: FormEvent) => {
@@ -662,7 +666,7 @@ function HomePage() {
     })();
   };
 
-  if (status === "loading") {
+  if (status === "loading" || (session && isRolesLoading)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg-base font-mono text-text-secondary">
         Initializing...
@@ -684,18 +688,18 @@ function HomePage() {
             <g stroke="currentColor" strokeWidth="0.5" fill="none" className="text-text-secondary opacity-70">
               {/* Outer boundary */}
               <circle cx="100" cy="100" r="90" />
-              
+
               {/* Geodesic/Polyhedron style intersecting geometric lines */}
               <polygon points="10,100 40,40 100,10 160,40 190,100 160,160 100,190 40,160" />
               <polygon points="28,56 64,28 136,28 172,56 172,144 136,172 64,172 28,144" />
               <polygon points="46,100 64,64 100,46 136,64 154,100 136,136 100,154 64,136" />
-              
+
               {/* Cross sections */}
               <line x1="100" y1="10" x2="100" y2="190" />
               <line x1="10" y1="100" x2="190" y2="100" />
               <line x1="36" y1="36" x2="164" y2="164" />
               <line x1="36" y1="164" x2="164" y2="36" />
-              
+
               {/* Vertical and horizontal chords */}
               <line x1="64" y1="28" x2="64" y2="172" />
               <line x1="136" y1="28" x2="136" y2="172" />
@@ -707,44 +711,44 @@ function HomePage() {
               <path d="M100 190 L64 136 L100 100 L136 136 Z" />
               <path d="M10 100 L64 64 L100 100 L64 136 Z" />
               <path d="M190 100 L136 64 L100 100 L136 136 Z" />
-              
+
               {/* Vertices/Points */}
               <g fill="currentColor" stroke="none">
                 <circle cx="100" cy="10" r="1.5" />
                 <circle cx="100" cy="190" r="1.5" />
                 <circle cx="10" cy="100" r="1.5" />
                 <circle cx="190" cy="100" r="1.5" />
-                
+
                 <circle cx="36" cy="36" r="1.5" />
                 <circle cx="164" cy="164" r="1.5" />
                 <circle cx="36" cy="164" r="1.5" />
                 <circle cx="164" cy="36" r="1.5" />
-                
+
                 <circle cx="40" cy="40" r="1.5" />
                 <circle cx="160" cy="40" r="1.5" />
                 <circle cx="160" cy="160" r="1.5" />
                 <circle cx="40" cy="160" r="1.5" />
-                
+
                 <circle cx="28" cy="56" r="1.5" />
                 <circle cx="172" cy="56" r="1.5" />
                 <circle cx="172" cy="144" r="1.5" />
                 <circle cx="28" cy="144" r="1.5" />
-                
+
                 <circle cx="64" cy="28" r="1.5" />
                 <circle cx="136" cy="28" r="1.5" />
                 <circle cx="136" cy="172" r="1.5" />
                 <circle cx="64" cy="172" r="1.5" />
-                
+
                 <circle cx="46" cy="100" r="1.5" />
                 <circle cx="154" cy="100" r="1.5" />
                 <circle cx="100" cy="46" r="1.5" />
                 <circle cx="100" cy="154" r="1.5" />
-                
+
                 <circle cx="64" cy="64" r="1.5" />
                 <circle cx="136" cy="64" r="1.5" />
                 <circle cx="136" cy="136" r="1.5" />
                 <circle cx="64" cy="136" r="1.5" />
-                
+
                 <circle cx="100" cy="100" r="2" />
               </g>
             </g>
@@ -761,14 +765,14 @@ function HomePage() {
           <p className="mt-3 font-mono text-xs uppercase tracking-widest text-text-secondary md:mt-4 md:text-sm">
             BITS Pilani, K K Birla Goa Campus
           </p>
-          
+
           <div className="my-8 h-px w-24 bg-border" />
-          
+
           <p className="max-w-sm text-sm text-text-secondary md:text-base leading-relaxed">
             Secure campus assistant with document-grounded responses and smart
             booking requests.
           </p>
-          
+
           <button
             onClick={() => signIn("google")}
             className="mt-10 border border-accent bg-accent/10 px-8 py-3.5 font-mono text-sm font-semibold tracking-wider text-accent transition-all hover:bg-accent hover:text-bg-base hover:shadow-[0_0_15px_rgba(128,252,104,0.3)]"
@@ -793,18 +797,18 @@ function HomePage() {
           <g stroke="currentColor" strokeWidth="0.5" fill="none" className="text-text-secondary opacity-100">
             {/* Outer boundary */}
             <circle cx="100" cy="100" r="90" />
-            
+
             {/* Geodesic/Polyhedron style intersecting geometric lines */}
             <polygon points="10,100 40,40 100,10 160,40 190,100 160,160 100,190 40,160" />
             <polygon points="28,56 64,28 136,28 172,56 172,144 136,172 64,172 28,144" />
             <polygon points="46,100 64,64 100,46 136,64 154,100 136,136 100,154 64,136" />
-            
+
             {/* Cross sections */}
             <line x1="100" y1="10" x2="100" y2="190" />
             <line x1="10" y1="100" x2="190" y2="100" />
             <line x1="36" y1="36" x2="164" y2="164" />
             <line x1="36" y1="164" x2="164" y2="36" />
-            
+
             {/* Vertical and horizontal chords */}
             <line x1="64" y1="28" x2="64" y2="172" />
             <line x1="136" y1="28" x2="136" y2="172" />
@@ -816,52 +820,52 @@ function HomePage() {
             <path d="M100 190 L64 136 L100 100 L136 136 Z" />
             <path d="M10 100 L64 64 L100 100 L64 136 Z" />
             <path d="M190 100 L136 64 L100 100 L136 136 Z" />
-            
+
             {/* Vertices/Points */}
             <g fill="currentColor" stroke="none">
               <circle cx="100" cy="10" r="1.5" />
               <circle cx="100" cy="190" r="1.5" />
               <circle cx="10" cy="100" r="1.5" />
               <circle cx="190" cy="100" r="1.5" />
-              
+
               <circle cx="36" cy="36" r="1.5" />
               <circle cx="164" cy="164" r="1.5" />
               <circle cx="36" cy="164" r="1.5" />
               <circle cx="164" cy="36" r="1.5" />
-              
+
               <circle cx="40" cy="40" r="1.5" />
               <circle cx="160" cy="40" r="1.5" />
               <circle cx="160" cy="160" r="1.5" />
               <circle cx="40" cy="160" r="1.5" />
-              
+
               <circle cx="28" cy="56" r="1.5" />
               <circle cx="172" cy="56" r="1.5" />
               <circle cx="172" cy="144" r="1.5" />
               <circle cx="28" cy="144" r="1.5" />
-              
+
               <circle cx="64" cy="28" r="1.5" />
               <circle cx="136" cy="28" r="1.5" />
               <circle cx="136" cy="172" r="1.5" />
               <circle cx="64" cy="172" r="1.5" />
-              
+
               <circle cx="46" cy="100" r="1.5" />
               <circle cx="154" cy="100" r="1.5" />
               <circle cx="100" cy="46" r="1.5" />
               <circle cx="100" cy="154" r="1.5" />
-              
+
               <circle cx="64" cy="64" r="1.5" />
               <circle cx="136" cy="64" r="1.5" />
               <circle cx="136" cy="136" r="1.5" />
               <circle cx="64" cy="136" r="1.5" />
-              
+
               <circle cx="100" cy="100" r="2" />
             </g>
           </g>
         </svg>
       </div>
 
-        <header className="relative z-10 flex-shrink-0 border-b border-border bg-bg-surface/50 backdrop-blur-md px-4 py-3 md:px-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+      <header className="relative z-10 flex-shrink-0 border-b border-border bg-bg-surface/50 backdrop-blur-md px-4 py-3 md:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="font-display text-lg font-semibold md:text-xl">
             CSIS SmartAssist
           </h1>
@@ -1071,11 +1075,10 @@ function HomePage() {
                       setActiveChatId(chatSession.id);
                       setInput("");
                     }}
-                    className={`flex w-full items-start justify-between gap-3 border px-3 py-2 text-left transition ${
-                      isActive
+                    className={`flex w-full items-start justify-between gap-3 border px-3 py-2 text-left transition ${isActive
                         ? "border-accent bg-bg-surface/60 backdrop-blur-sm"
                         : "border-border hover:bg-bg-surface/40 hover:backdrop-blur-sm"
-                    }`}
+                      }`}
                   >
                     <span className="min-w-0 flex-1 truncate text-sm text-text-primary">
                       {chatSession.title}
