@@ -44,7 +44,7 @@ class ChatService:
             import google.generativeai as genai
             genai.configure(api_key=self.settings.gemini_api_key)
             result = genai.embed_content(
-                model="models/embedding-001",
+                model="models/gemini-embedding-001",
                 content=text,
                 task_type="retrieval_query",
             )
@@ -89,16 +89,16 @@ class ChatService:
             import google.generativeai as genai
             genai.configure(api_key=self.settings.gemini_api_key)
             # Use the model name from settings or a default
-            model_name = self.settings.ollama_model.split(":")[0] if ":" in self.settings.ollama_model else "gemini-1.5-flash"
+            model_name = self.settings.ollama_model.split(":")[0] if ":" in self.settings.ollama_model else "gemini-2.0-flash"
             if "gemma" in model_name.lower():
-                model_name = "gemini-1.5-flash"
+                model_name = "gemini-2.0-flash"
             
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
             return response.text
         except Exception as exc:
-            logger.error(f"[Gemini] Error: {exc}")
-            return "Error calling Gemini API. Please check your credentials."
+            logger.error(f"[Gemini] Error: {exc}", exc_info=True)
+            return f"Error calling Gemini API: {exc}. Please check your credentials."
 
     def _call_ollama(self, prompt: str) -> str:
         """Call the Ollama API."""

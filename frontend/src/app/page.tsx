@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Polyhedron } from "@/components/Polyhedron";
 
 interface Message {
   id: string;
@@ -678,81 +679,8 @@ function HomePage() {
     return (
       <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-bg-base px-4 text-center">
         {/* Animated Polyhedron Sphere Background */}
-        <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden opacity-20">
-          <svg
-            className="w-[1200px] max-w-[200vw] animate-spin"
-            viewBox="0 0 200 200"
-            xmlns="http://www.w3.org/2000/svg"
-            style={{ animationDuration: "120s" }}
-          >
-            <g stroke="currentColor" strokeWidth="0.5" fill="none" className="text-text-secondary opacity-70">
-              {/* Outer boundary */}
-              <circle cx="100" cy="100" r="90" />
-
-              {/* Geodesic/Polyhedron style intersecting geometric lines */}
-              <polygon points="10,100 40,40 100,10 160,40 190,100 160,160 100,190 40,160" />
-              <polygon points="28,56 64,28 136,28 172,56 172,144 136,172 64,172 28,144" />
-              <polygon points="46,100 64,64 100,46 136,64 154,100 136,136 100,154 64,136" />
-
-              {/* Cross sections */}
-              <line x1="100" y1="10" x2="100" y2="190" />
-              <line x1="10" y1="100" x2="190" y2="100" />
-              <line x1="36" y1="36" x2="164" y2="164" />
-              <line x1="36" y1="164" x2="164" y2="36" />
-
-              {/* Vertical and horizontal chords */}
-              <line x1="64" y1="28" x2="64" y2="172" />
-              <line x1="136" y1="28" x2="136" y2="172" />
-              <line x1="28" y1="56" x2="172" y2="56" />
-              <line x1="28" y1="144" x2="172" y2="144" />
-
-              {/* Triangle meshes to create 3D illusion */}
-              <path d="M100 10 L64 64 L100 100 L136 64 Z" />
-              <path d="M100 190 L64 136 L100 100 L136 136 Z" />
-              <path d="M10 100 L64 64 L100 100 L64 136 Z" />
-              <path d="M190 100 L136 64 L100 100 L136 136 Z" />
-
-              {/* Vertices/Points */}
-              <g fill="currentColor" stroke="none">
-                <circle cx="100" cy="10" r="1.5" />
-                <circle cx="100" cy="190" r="1.5" />
-                <circle cx="10" cy="100" r="1.5" />
-                <circle cx="190" cy="100" r="1.5" />
-
-                <circle cx="36" cy="36" r="1.5" />
-                <circle cx="164" cy="164" r="1.5" />
-                <circle cx="36" cy="164" r="1.5" />
-                <circle cx="164" cy="36" r="1.5" />
-
-                <circle cx="40" cy="40" r="1.5" />
-                <circle cx="160" cy="40" r="1.5" />
-                <circle cx="160" cy="160" r="1.5" />
-                <circle cx="40" cy="160" r="1.5" />
-
-                <circle cx="28" cy="56" r="1.5" />
-                <circle cx="172" cy="56" r="1.5" />
-                <circle cx="172" cy="144" r="1.5" />
-                <circle cx="28" cy="144" r="1.5" />
-
-                <circle cx="64" cy="28" r="1.5" />
-                <circle cx="136" cy="28" r="1.5" />
-                <circle cx="136" cy="172" r="1.5" />
-                <circle cx="64" cy="172" r="1.5" />
-
-                <circle cx="46" cy="100" r="1.5" />
-                <circle cx="154" cy="100" r="1.5" />
-                <circle cx="100" cy="46" r="1.5" />
-                <circle cx="100" cy="154" r="1.5" />
-
-                <circle cx="64" cy="64" r="1.5" />
-                <circle cx="136" cy="64" r="1.5" />
-                <circle cx="136" cy="136" r="1.5" />
-                <circle cx="64" cy="136" r="1.5" />
-
-                <circle cx="100" cy="100" r="2" />
-              </g>
-            </g>
-          </svg>
+        <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden">
+          <Polyhedron />
         </div>
 
         <div className="z-10 flex w-full max-w-xl flex-col items-center rounded-xl border border-border bg-bg-surface bg-opacity-5 p-8 backdrop-blur-sm md:p-12 shadow-2xl">
