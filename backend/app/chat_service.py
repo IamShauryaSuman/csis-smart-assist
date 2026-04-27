@@ -5,6 +5,7 @@ from functools import lru_cache
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import requests
 from fastapi import HTTPException
 
 from calender.client import get_calendar_client, parse_start_iso
@@ -23,27 +24,24 @@ _conversation_memory: dict[str, dict[str, Any]] = defaultdict(
 )
 
 
-@lru_cache
-def _get_genai_client(api_key: str):
-    """Lazily create a Gemini client (cached per api_key)."""
-    from google import genai
-    return genai.Client(api_key=api_key)
-
-
-def _gemini_embed_query(text: str, api_key: str) -> list[float]:
-    """Embed a single query string using Gemini text-embedding-004."""
-    client = _get_genai_client(api_key)
-    result = client.models.embed_content(
-        model="gemini-embedding-001",
-        contents=[text],
-    )
-    return result.embeddings[0].values
-
-
 class ChatService:
     def __init__(self, settings: Settings, supabase_service: SupabaseService) -> None:
         self.settings = settings
         self.supabase_service = supabase_service
+        # Initialize embedding model lazily
+        self._embedding_model = None
+
+    def _get_embedding_model(self):
+        """Lazily initialize the embedding model."""
+        if self._embedding_model is None:
+            from sentence_transformers import SentenceTransformer
+            self._embedding_model = SentenceTransformer(self.settings.embedding_model)
+        return self._embedding_model
+
+    def _embed_query(self, text: str) -> list[float]:
+        """Generate embeddings using local sentence transformer."""
+        model = self._get_embedding_model()
+        return model.encode(text).tolist()
 
     # ── Memory helpers ─────────────────────────────────────────────────
     def _get_memory(self, user_id: str) -> dict[str, Any]:
@@ -118,18 +116,16 @@ class ChatService:
             collection = client.get_or_create_collection(name="RAG_db")
 
             if collection.count() > 0:
-                if self.settings.gemini_api_key:
-                    query_embedding = _gemini_embed_query(
-                        query, self.settings.gemini_api_key)
-                    results = collection.query(
-                        query_embeddings=[query_embedding],
-                        n_results=5,
-                    )
-                    if results and "documents" in results and results["documents"]:
-                        rag_chunks = results["documents"][0]
-                        # Build source info from ChromaDB results
-                        for i, doc in enumerate(rag_chunks):
-                            sources.append({
+                query_embedding = self._embed_query(query)
+                results = collection.query(
+                    query_embeddings=[query_embedding],
+                    n_results=5,
+                )
+                if results and "documents" in results and results["documents"]:
+                    rag_chunks = results["documents"][0]
+                    # Build source info from ChromaDB results
+                    for i, doc in enumerate(rag_chunks):
+                        sources.append({
                                 "document_id": results["ids"][0][i] if results.get("ids") else None,
                                 "chunk_index": i,
                                 "similarity": round(1 - (results["distances"][0][i] if results.get("distances") else 0), 4),
@@ -164,7 +160,7 @@ Question:
         if answer == "__LLM_QUOTA_EXCEEDED__":
             raise HTTPException(
                 status_code=429,
-                detail="Language model quota exceeded. Please retry later or update Gemini billing/quota.",
+                detail="Language model quota exceeded. Please retry later.",
             )
         if answer == "__LLM_UNAVAILABLE__":
             raise HTTPException(
@@ -311,19 +307,6 @@ Question:
         )
 
     def _decide_intent(self, query: str) -> dict[str, Any]:
-        if not self.settings.gemini_api_key:
-            lowered = query.lower()
-            if any(word in lowered for word in ("availability", "available", "free slot", "calendar", "schedule", "time", "book", "booking", "reserve", "reservation")):
-                return {
-                    "intent": "calendar_query",
-                    "slot": {
-                        "start_iso": None,
-                        "duration_minutes": 60,
-                        "location": None,
-                    },
-                }
-            return {"intent": "info_query"}
-
         now = datetime.now(ZoneInfo("Asia/Kolkata"))
         current_date_str = now.strftime("%Y-%m-%d")
         current_time_str = now.strftime("%H:%M:%S")
@@ -402,40 +385,27 @@ User message:
         return {"intent": "info_query"}
 
     def _generate_answer(self, prompt: str) -> str:
-        if not self.settings.gemini_api_key:
-            return "I can help with that, but LLM generation is not configured yet."
-
         try:
-            from google import genai
-        except Exception:
-            return (
-                "RAG retrieval succeeded, but optional LLM dependency is missing. "
-                "Install backend requirements to enable Gemini generation."
+            response = requests.post(
+                f"{self.settings.ollama_base_url}/api/generate",
+                json={
+                    "model": self.settings.ollama_model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {
+                        "temperature": 0.7,
+                        "top_p": 0.9,
+                        "num_predict": 512
+                    }
+                },
+                timeout=30
             )
-
-        try:
-            client = genai.Client(api_key=self.settings.gemini_api_key)
-            model_candidates = [
-                "gemini-2.5-flash",
-                "gemini-2.0-flash",
-                "gemini-1.5-flash",
-            ]
-            for model_name in model_candidates:
-                try:
-                    response = client.models.generate_content(
-                        model=model_name,
-                        contents=prompt,
-                    )
-                    if response.text:
-                        return response.text
-                except Exception as exc:
-                    message = str(exc).lower()
-                    print(f"[Gemini] Error with {model_name}: {exc}")
-                    if "resource_exhausted" in message or "quota" in message or "code': 429" in message or "code\": 429" in message:
-                        return "__LLM_QUOTA_EXCEEDED__"
-                    continue
-            print(f"[Gemini] All model candidates failed for prompt")
+            response.raise_for_status()
+            result = response.json()
+            return result.get("response", "").strip()
+        except requests.exceptions.RequestException as e:
+            print(f"[Ollama] Error: {e}")
             return "__LLM_UNAVAILABLE__"
         except Exception as exc:
-            print(f"[Gemini] Outer exception: {exc}")
+            print(f"[Ollama] Unexpected error: {exc}")
             return "__LLM_UNAVAILABLE__"

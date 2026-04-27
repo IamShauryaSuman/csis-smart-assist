@@ -11,7 +11,9 @@ class Settings(BaseSettings):
     vector_dimensions: int = 1536
     frontend_origin: str = "http://localhost:3000"
     frontend_origins: str | None = None
-    gemini_api_key: str | None = None
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "gemma2:2b"
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     google_calendar_id: str | None = None
     google_calendar_token_path: str | None = None
     google_calendar_token: str | None = None

@@ -47,7 +47,7 @@ Most teams stop at a demo chatbot. This project is intentionally **workflow-comp
 
 ### 1) Smart Chat Assistant
 
-- Gemini-powered conversational responses (when `GEMINI_API_KEY` is configured).
+- Local LLM-powered conversational responses (via Ollama).
 - Intent routing between:
   - **`info_query`** (knowledge/help responses)
   - **`calendar_query`** (availability and slot workflows)
@@ -134,7 +134,7 @@ Planned hardening:
 
 - FastAPI
 - Supabase (users, roles, bookings, chat history, RAG metadata)
-- Gemini API for generation
+- Ollama (local LLM) for generation
 - ChromaDB + Sentence Transformers for local retrieval path
 - Google Calendar API integration
 
@@ -150,11 +150,11 @@ flowchart LR
     U[User] --> F[Next.js Frontend]
     F --> A[FastAPI Backend]
     A --> S[(Supabase)]
-    A --> G[Gemini API]
+    A --> O[Ollama Local LLM]
     A --> C[Google Calendar API]
     A --> R[(Local RAG / ChromaDB)]
     S --> A
-    G --> A
+    O --> A
     C --> A
     R --> A
     A --> F
@@ -190,7 +190,7 @@ csis-smart-assist/
 - npm
 - Supabase project
 - Google OAuth credentials
-- (Optional but recommended) Gemini API key
+- Ollama (for local LLM)
 
 ## 1) Clone and enter repo
 
@@ -225,7 +225,9 @@ Set at least these keys in `backend/.env`:
 - `SUPABASE_URL`
 - `SUPABASE_SECRET_KEY` (preferred)
 - `FRONTEND_ORIGIN` (e.g. `http://localhost:3000`)
-- `GEMINI_API_KEY` (for AI generation)
+- `OLLAMA_BASE_URL` (e.g. `http://localhost:11434`)
+- `OLLAMA_MODEL` (e.g. `gemma2:2b`)
+- `EMBEDDING_MODEL` (e.g. `sentence-transformers/all-MiniLM-L6-v2`)
 - `GOOGLE_CALENDAR_ID`
 - `GOOGLE_CALENDAR_TOKEN_PATH`
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SENDER_EMAIL`, `SMTP_SENDER_PASSWORD` (if using notifications)
@@ -283,7 +285,9 @@ Open `http://localhost:3000`.
 | `SUPABASE_SERVICE_ROLE_KEY`  | Optional     | Legacy fallback key                    |
 | `VECTOR_DIMENSIONS`          | Optional     | Embedding vector size (default `1536`) |
 | `FRONTEND_ORIGIN`            | Yes          | CORS origin for frontend               |
-| `GEMINI_API_KEY`             | Recommended  | LLM generation + intent routing        |
+| `OLLAMA_BASE_URL`           | Yes          | Ollama server URL (default: http://localhost:11434) |
+| `OLLAMA_MODEL`             | Yes          | Ollama model name (default: gemma2:2b) |
+| `EMBEDDING_MODEL`          | Yes          | Sentence transformer model (default: all-MiniLM-L6-v2) |
 | `GOOGLE_CALENDAR_ID`         | For calendar | Target calendar for events/checks      |
 | `GOOGLE_CALENDAR_TOKEN_PATH` | For calendar | OAuth token JSON path                  |
 | `ADMIN_SEED_EMAILS`          | Optional     | Comma-separated admin bootstrap emails |
@@ -382,7 +386,7 @@ curl http://127.0.0.1:8000/health
 ## Known constraints
 
 - Calendar flow requires valid Google Calendar credentials/token file.
-- LLM behavior degrades to heuristic routing if `GEMINI_API_KEY` is missing.
+- LLM behavior degrades if Ollama is not running or if the model is unavailable.
 - Parts of `backend/Chatbot/` are legacy and not the primary runtime path.
 
 ---

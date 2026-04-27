@@ -35,7 +35,9 @@ Create `.env` in `backend/` from `.env.example` and set:
 - `FRONTEND_ORIGIN` (legacy single-origin fallback, default `http://localhost:3000`)
 - `FRONTEND_ORIGINS` (preferred, comma-separated allowlist e.g. `http://localhost:3000,https://your-frontend.vercel.app`)
 - `ADMIN_SEED_EMAILS` (comma-separated)
-- `GEMINI_API_KEY` (required for LLM generation)
+- `OLLAMA_BASE_URL` (default `http://localhost:11434`)
+- `OLLAMA_MODEL` (default `gemma2:2b`)
+- `EMBEDDING_MODEL` (default `sentence-transformers/all-MiniLM-L6-v2`)
 - `GOOGLE_CALENDAR_ID`
 - `GOOGLE_CALENDAR_TOKEN_PATH` (default `calender/token.json`)
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SENDER_EMAIL`, `SMTP_SENDER_PASSWORD` (for email notifications)
@@ -87,7 +89,9 @@ This repo includes a root `render.yaml` that deploys `backend/` as a Python web 
    - `SUPABASE_SECRET_KEY` (or `SUPABASE_SERVICE_ROLE_KEY`)
    - `FRONTEND_ORIGINS` (include all frontend URLs that call the API, including Vercel preview/production and local dev)
    - `FRONTEND_ORIGIN` (optional legacy fallback)
-   - `GEMINI_API_KEY` (if chat generation is enabled)
+   - `OLLAMA_BASE_URL` (default: `http://localhost:11434`)
+   - `OLLAMA_MODEL` (default: `gemma2:2b`)
+   - `EMBEDDING_MODEL` (default: `sentence-transformers/all-MiniLM-L6-v2`)
    - `GOOGLE_CALENDAR_ID` and `GOOGLE_CALENDAR_TOKEN_PATH` (if calendar endpoints are used)
    - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SENDER_EMAIL`, `SMTP_SENDER_PASSWORD` (if notifications are enabled)
 4. Optional recommended values in Render:

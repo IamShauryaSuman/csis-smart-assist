@@ -28,27 +28,11 @@ except Exception:  # pragma: no cover
     chromadb = None
 
 
-def _gemini_embed(texts: list[str], api_key: str) -> list[list[float]]:
-    """Generate embeddings using Gemini's text-embedding-004 model.
-
-    This replaces the local SentenceTransformer model to stay within
-    Render free-tier memory limits (512 MB).
-    """
-    from google import genai
-
-    client = genai.Client(api_key=api_key)
-    # Batch in groups of 100 to respect API limits
-    all_embeddings: list[list[float]] = []
-    batch_size = 100
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i:i + batch_size]
-        result = client.models.embed_content(
-            model="gemini-embedding-001",
-            contents=batch,
-        )
-        for emb in result.embeddings:
-            all_embeddings.append(emb.values)
-    return all_embeddings
+def _local_embed(texts: list[str], model_name: str = "sentence-transformers/all-MiniLM-L6-v2") -> list[list[float]]:
+    """Generate embeddings using local sentence transformer."""
+    from sentence_transformers import SentenceTransformer
+    model = SentenceTransformer(model_name)
+    return model.encode(texts).tolist()
 
 
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".html", ".htm", ".txt", ".md"}
@@ -222,12 +206,11 @@ def sync_local_rag_to_chromadb(
     db_path: str = "./RAG_db",
     chunk_size: int = 140,
     overlap: int = 30,
-    gemini_api_key: str | None = None,
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
 ) -> dict[str, Any]:
-    """Ingest local documents into ChromaDB with Gemini embeddings.
+    """Ingest local documents into ChromaDB with local embeddings.
 
-    Uses Gemini text-embedding-004 instead of a local SentenceTransformer
-    model to stay within Render free-tier memory limits.
+    Uses sentence-transformers for embeddings.
     """
     summary: dict[str, Any] = {
         "data_dir": data_dir,
@@ -239,10 +222,6 @@ def sync_local_rag_to_chromadb(
 
     if chromadb is None:
         summary["errors"].append("chromadb is not installed")
-        return summary
-    if not gemini_api_key:
-        summary["errors"].append(
-            "GEMINI_API_KEY not set; skipping ChromaDB ingestion")
         return summary
 
     base_path = _resolve_data_dir(data_dir)
@@ -289,9 +268,9 @@ def sync_local_rag_to_chromadb(
 
     if all_chunks:
         try:
-            embeddings = _gemini_embed(all_chunks, gemini_api_key)
+            embeddings = _local_embed(all_chunks, embedding_model)
         except Exception as exc:
-            summary["errors"].append(f"Gemini embedding failed: {exc}")
+            summary["errors"].append(f"Embedding failed: {exc}")
             return summary
         collection.add(
             embeddings=embeddings,

@@ -67,7 +67,7 @@ def _run_rag_ingest() -> None:
     try:
         chroma_summary = sync_local_rag_to_chromadb(
             data_dir=settings.rag_local_data_dir,
-            gemini_api_key=settings.gemini_api_key,
+            embedding_model=settings.embedding_model,
         )
         print("[RAG] ChromaDB sync summary:", chroma_summary)
     except Exception as exc:
