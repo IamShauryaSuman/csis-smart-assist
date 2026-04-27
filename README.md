@@ -227,8 +227,13 @@ Set at least these keys in `backend/.env`:
 - `FRONTEND_ORIGIN` (e.g. `http://localhost:3000`)
 - `GEMINI_API_KEY` (for AI generation)
 - `GOOGLE_CALENDAR_ID`
-- `GOOGLE_CALENDAR_TOKEN_PATH`
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SENDER_EMAIL`, `SMTP_SENDER_PASSWORD` (if using notifications)
+- `GOOGLE_REFRESH_TOKEN`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_TOKEN_PATH` (optional fallback to token JSON)
+- `GOOGLE_SENDER_EMAIL` (if using notifications)
+
+Use the same `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in both `frontend/.env.local` and `backend/.env` so one Google Cloud app handles sign-in and all Google API calls.
 
 Apply DB schema by running `supabase/schema.sql` in your Supabase SQL editor.
 
@@ -285,11 +290,16 @@ Open `http://localhost:3000`.
 | `FRONTEND_ORIGIN`            | Yes          | CORS origin for frontend               |
 | `GEMINI_API_KEY`             | Recommended  | LLM generation + intent routing        |
 | `GOOGLE_CALENDAR_ID`         | For calendar | Target calendar for events/checks      |
-| `GOOGLE_CALENDAR_TOKEN_PATH` | For calendar | OAuth token JSON path                  |
+| `GOOGLE_DRIVE_FOLDER_ID`     | Optional     | Default Drive folder for RAG ingest    |
+| `GOOGLE_REFRESH_TOKEN`       | For Google   | Shared OAuth refresh token             |
+| `GOOGLE_CLIENT_ID`           | For Google   | Shared OAuth client id                 |
+| `GOOGLE_CLIENT_SECRET`       | For Google   | Shared OAuth client secret             |
+| `GOOGLE_TOKEN_PATH`          | Optional     | OAuth token JSON path fallback         |
+| `GOOGLE_SENDER_EMAIL`        | Optional     | Gmail API sender address               |
 | `ADMIN_SEED_EMAILS`          | Optional     | Comma-separated admin bootstrap emails |
-| `SMTP_*`                     | Optional     | Email notification transport           |
 | `RAG_LOCAL_DATA_DIR`         | Optional     | Local docs folder                      |
 | `RAG_AUTO_INGEST_LOCAL_DATA` | Optional     | Auto-ingest at startup                 |
+| `RAG_AUTO_INGEST_DRIVE_DATA` | Optional     | Auto-ingest Google Drive at startup    |
 
 \* `SUPABASE_SECRET_KEY` preferred; fallback options are supported.
 
@@ -340,6 +350,7 @@ Open `http://localhost:3000`.
 - `POST /rag/chunks`
 - `POST /rag/chunks/search`
 - `POST /rag/ingest-local`
+- `POST /rag/ingest-drive`
 
 ---
 

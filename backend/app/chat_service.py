@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from calender.client import get_calendar_client, parse_start_iso
 from calender.functions import find_nearby_free_slots, is_slot_available
 from .config import Settings
+from .rag_store import search_rag_collection
 from .schemas import CalendarFlowOut, CalendarSlotOut, ChatResponseOut
 from .services import SupabaseService
 
@@ -106,34 +107,31 @@ class ChatService:
                 status_code=500, detail=f"Chat processing failed: {exc}") from exc
 
     def _handle_info_query(self, query: str, user_id: str) -> ChatResponseOut:
-        # Use local ChromaDB for RAG retrieval instead of Supabase
         rag_chunks: list[str] = []
         sources: list[dict] = []
 
         try:
-            import os
-            os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
-            import chromadb
-            client = chromadb.PersistentClient(path="./RAG_db")
-            collection = client.get_or_create_collection(name="RAG_db")
-
-            if collection.count() > 0:
-                if self.settings.gemini_api_key:
-                    query_embedding = _gemini_embed_query(
-                        query, self.settings.gemini_api_key)
-                    results = collection.query(
-                        query_embeddings=[query_embedding],
-                        n_results=5,
-                    )
-                    if results and "documents" in results and results["documents"]:
-                        rag_chunks = results["documents"][0]
-                        # Build source info from ChromaDB results
-                        for i, doc in enumerate(rag_chunks):
-                            sources.append({
-                                "document_id": results["ids"][0][i] if results.get("ids") else None,
-                                "chunk_index": i,
-                                "similarity": round(1 - (results["distances"][0][i] if results.get("distances") else 0), 4),
-                            })
+            if self.settings.gemini_api_key:
+                query_embedding = _gemini_embed_query(
+                    query, self.settings.gemini_api_key)
+                matches = search_rag_collection(
+                    query_embedding=query_embedding,
+                    match_count=5,
+                )
+                rag_chunks = [
+                    match["content"]
+                    for match in matches
+                    if match.get("content")
+                ]
+                sources = [
+                    {
+                        "document_id": match.get("document_id"),
+                        "chunk_index": match.get("chunk_index"),
+                        "similarity": match.get("similarity"),
+                        "metadata": match.get("metadata", {}),
+                    }
+                    for match in matches
+                ]
         except Exception as exc:
             print(f"[ChromaDB] retrieval error: {exc}")
             rag_chunks = []

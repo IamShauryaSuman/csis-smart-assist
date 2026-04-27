@@ -23,6 +23,7 @@ frontend/.env.*.local
 tokens.json
 backend/calender/token.json
 backend/calender/tokens.json
+backend/keys/service-account.json
 
 # Frontend build
 frontend/.next/

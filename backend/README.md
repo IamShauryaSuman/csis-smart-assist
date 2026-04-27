@@ -37,10 +37,20 @@ Create `.env` in `backend/` from `.env.example` and set:
 - `ADMIN_SEED_EMAILS` (comma-separated)
 - `GEMINI_API_KEY` (required for LLM generation)
 - `GOOGLE_CALENDAR_ID`
-- `GOOGLE_CALENDAR_TOKEN_PATH` (default `calender/token.json`)
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SENDER_EMAIL`, `SMTP_SENDER_PASSWORD` (for email notifications)
+- `GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON` or `GOOGLE_CALENDAR_SERVICE_ACCOUNT_PATH` (preferred for booking event writes and Drive reads)
+- `GOOGLE_CALENDAR_SUBJECT` (optional domain-wide delegation user)
+- `GOOGLE_DRIVE_FOLDER_ID` (optional default source for Drive ingestion)
+- `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_TOKEN_URI` (OAuth for Gmail API notifications)
+- `GOOGLE_TOKEN_PATH` (fallback token JSON path)
+- `GOOGLE_SENDER_EMAIL` (sender address for Gmail API notifications)
 - `RAG_LOCAL_DATA_DIR` (default `data`)
 - `RAG_AUTO_INGEST_LOCAL_DATA` (default `true`)
+- `RAG_AUTO_INGEST_DRIVE_DATA` (default `false`)
+
+For calendar bookings, service account credentials are preferred so approvals can inject events directly into your shared calendar.
+Make sure the target calendar is shared with the service account email with permission to edit events.
+Drive ingestion also prefers the same service account credentials (grant Drive folder/file access to that service account).
+OAuth refresh-token credentials are used for Gmail notifications.
 
 ### 5) Database bootstrap
 
@@ -66,7 +76,21 @@ This creates:
 curl -X POST http://localhost:8000/rag/ingest-local
 ```
 
-### 7) Run API
+### 7) Google Drive RAG ingest
+
+- Supported Drive types: Google Docs, Google Sheets, Google Slides, PDF, DOCX, HTML, TXT, MD.
+- Manual ingest endpoint:
+
+```bash
+curl -X POST http://localhost:8000/rag/ingest-drive \
+   -H "Content-Type: application/json" \
+   -d '{"folder_id":"your-folder-id","recursive":true,"max_files":500}'
+```
+
+- If `GOOGLE_DRIVE_FOLDER_ID` is set, `folder_id` can be omitted in the request body.
+- You can enable startup auto-sync using `RAG_AUTO_INGEST_DRIVE_DATA=true`.
+
+### 8) Run API
 
 ```bash
 source .venv/bin/activate
@@ -88,8 +112,7 @@ This repo includes a root `render.yaml` that deploys `backend/` as a Python web 
    - `FRONTEND_ORIGINS` (include all frontend URLs that call the API, including Vercel preview/production and local dev)
    - `FRONTEND_ORIGIN` (optional legacy fallback)
    - `GEMINI_API_KEY` (if chat generation is enabled)
-   - `GOOGLE_CALENDAR_ID` and `GOOGLE_CALENDAR_TOKEN_PATH` (if calendar endpoints are used)
-   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SENDER_EMAIL`, `SMTP_SENDER_PASSWORD` (if notifications are enabled)
+   - `GOOGLE_CALENDAR_ID`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_SENDER_EMAIL`
 4. Optional recommended values in Render:
    - `RAG_AUTO_INGEST_LOCAL_DATA=false`
    - `VECTOR_DIMENSIONS=1536`
@@ -117,3 +140,4 @@ uvicorn main:app --host 0.0.0.0 --port $PORT
 - `POST /rag/chunks`
 - `POST /rag/chunks/search`
 - `POST /rag/ingest-local`
+- `POST /rag/ingest-drive`

@@ -1,19 +1,24 @@
 import asyncio
-import smtplib
 import threading
+from base64 import urlsafe_b64encode
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from datetime import datetime, timezone
 from email.message import EmailMessage
+from email.utils import formataddr
 from uuid import UUID
 from zoneinfo import ZoneInfo
-from calender.functions import *
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from google.auth.exceptions import RefreshError
+from googleapiclient.errors import HttpError
 
 from app.chat_service import ChatService
 from app.config import get_settings
+from app.google_client import get_google_drive_client
+from app.google_client import get_google_gmail_client
+from app.rag_store import search_rag_collection
 from calender.client import get_calendar_client, parse_start_iso
 from calender.functions import create_event, find_nearby_free_slots, is_slot_available
 from app.schemas import (
@@ -27,8 +32,7 @@ from app.schemas import (
     ChatRequestIn,
     ChatResponseOut,
     ChatSessionCreateIn,
-    RagChunkCreateIn,
-    RagDocumentCreateIn,
+    RagDriveIngestIn,
     RagSearchIn,
     RoleAssignmentIn,
     UserSyncIn,
@@ -48,30 +52,24 @@ def _run_rag_ingest() -> None:
     os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
 
     try:
-        from app.rag_local_ingest import sync_local_rag_data_folder, sync_local_rag_to_chromadb
+        from app.rag_local_ingest import (
+            sync_google_drive_rag_folder,
+        )
     except Exception as exc:
         print(f"[RAG] Failed to import rag_local_ingest: {exc}")
         return
-
-    try:
-        service = get_supabase_service()
-        summary = sync_local_rag_data_folder(
-            service=service,
-            data_dir=settings.rag_local_data_dir,
-            vector_dimensions=settings.vector_dimensions,
-        )
-        print("[RAG] Supabase sync summary:", summary)
-    except Exception as exc:
-        print(f"[RAG] Supabase sync failed: {exc}")
-
-    try:
-        chroma_summary = sync_local_rag_to_chromadb(
-            data_dir=settings.rag_local_data_dir,
-            gemini_api_key=settings.gemini_api_key,
-        )
-        print("[RAG] ChromaDB sync summary:", chroma_summary)
-    except Exception as exc:
-        print(f"[RAG] ChromaDB sync failed: {exc}")
+    if settings.rag_auto_ingest_drive_data and settings.google_drive_folder_id:
+        try:
+            drive_service = get_google_drive_client(settings)
+            drive_summary = sync_google_drive_rag_folder(
+                drive_service=drive_service,
+                folder_id=settings.google_drive_folder_id,
+                vector_dimensions=settings.vector_dimensions,
+                gemini_api_key=settings.gemini_api_key,
+            )
+            print("[RAG] Drive RAG sync summary:", drive_summary)
+        except Exception as exc:
+            print(f"[RAG] Drive RAG sync failed: {exc}")
 
 
 def _schedule_rag_ingest() -> None:
@@ -88,7 +86,7 @@ def _schedule_rag_ingest() -> None:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Delay RAG ingestion so uvicorn binds the port first.
     # call_later runs _schedule_rag_ingest 5s after the event-loop starts.
-    if settings.rag_auto_ingest_local_data:
+    if settings.rag_auto_ingest_drive_data:
         loop = asyncio.get_event_loop()
         loop.call_later(5, _schedule_rag_ingest)
         print("[RAG] Ingestion scheduled (5s after port bind)")
@@ -118,26 +116,32 @@ def _send_email_notification(
     recipients: list[str],
     subject: str,
     body: str,
+    html: str | None = None,
 ) -> None:
-    smtp_sender_email = settings.smtp_sender_email
-    smtp_sender_password = settings.smtp_sender_password
-    if not smtp_sender_email or not smtp_sender_password:
-        return
-
     normalized_recipients = sorted(
         {item.strip() for item in recipients if item and item.strip()})
     if not normalized_recipients:
         return
 
+    sender_email = settings.google_sender_email
+    if not sender_email:
+        print("[Email] GOOGLE_SENDER_EMAIL not configured, skipping")
+        return
+
     message = EmailMessage()
-    message["From"] = smtp_sender_email
+    message["From"] = formataddr(("CSIS SmartAssist", sender_email))
     message["To"] = ", ".join(normalized_recipients)
     message["Subject"] = subject
     message.set_content(body)
+    if html:
+        message.add_alternative(html, subtype="html")
 
-    with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port) as smtp_client:
-        smtp_client.login(smtp_sender_email, smtp_sender_password)
-        smtp_client.send_message(message)
+    gmail_service = get_google_gmail_client(settings)
+    raw_payload = urlsafe_b64encode(message.as_bytes()).decode("utf-8")
+    gmail_service.users().messages().send(
+        userId="me",
+        body={"raw": raw_payload},
+    ).execute()
 
 
 def _parse_booking_slot_to_utc(date_value: str, time_slot: str) -> tuple[datetime, datetime]:
@@ -275,8 +279,9 @@ def create_booking_request(
 
     def _notify():
         try:
-            send_email(
-                email_receiver=settings.admin_receiver_email,
+            _send_email_notification(
+                recipients=[
+                    settings.admin_receiver_email] if settings.admin_receiver_email else [],
                 subject=f"[CSIS SmartAssist] New booking request {booking['id']}",
                 body=(
                     "A new booking request has been created.\n\n"
@@ -323,27 +328,51 @@ def decide_booking_request(
 ) -> dict:
     current_booking = service.get_booking_request_by_id(request_id)
     calendar_event_link: str | None = None
+    calendar_event_error: str | None = None
 
     if payload.status == BookingStatus.accepted:
         start_time, end_time = _parse_booking_slot_to_utc(
             date_value=str(current_booking["date"]),
             time_slot=str(current_booking["time_slot"]),
         )
-        calendar_service, calendar_id = get_calendar_client(settings)
-        calendar_event = create_event(
-            service=calendar_service,
-            calendarID=calendar_id,
-            start_time=start_time,
-            end_time=end_time,
-            title=f"Booking: {current_booking['location']}",
-            description=(
-                f"Request ID: {current_booking['id']}\n"
-                f"Purpose: {current_booking['purpose']}\n"
-                f"Remarks: {payload.remarks or current_booking.get('remarks') or '-'}"
-            ),
-            location=current_booking["location"],
-        )
-        calendar_event_link = calendar_event.get("htmlLink")
+        try:
+            calendar_service, calendar_id = get_calendar_client(settings)
+            calendar_event = create_event(
+                service=calendar_service,
+                calendarID=calendar_id,
+                start_time=start_time,
+                end_time=end_time,
+                title=f"Booking: {current_booking['location']}",
+                description=(
+                    f"Request ID: {current_booking['id']}\n"
+                    f"Purpose: {current_booking['purpose']}\n"
+                    f"Remarks: {payload.remarks or current_booking.get('remarks') or '-'}"
+                ),
+                location=current_booking["location"],
+            )
+            calendar_event_link = calendar_event.get("htmlLink")
+        except RefreshError as exc:
+            calendar_event_error = (
+                "Calendar event could not be created because Google OAuth scopes are invalid for "
+                "the configured refresh token. Re-authorize with calendar scope."
+            )
+            print(
+                f"[Calendar] OAuth refresh failed while creating event: {exc}")
+        except HttpError as exc:
+            error_text = str(exc)
+            if "insufficient authentication scopes" in error_text.lower() or "insufficientpermissions" in error_text.lower():
+                calendar_event_error = (
+                    "Calendar event could not be created because the configured Google token does "
+                    "not include calendar permission. Re-authorize with https://www.googleapis.com/auth/calendar."
+                )
+            else:
+                calendar_event_error = "Calendar event could not be created"
+            print(
+                f"[Calendar] Google API error while creating event for booking {request_id}: {exc}")
+        except Exception as exc:
+            calendar_event_error = "Calendar event could not be created"
+            print(
+                f"[Calendar] Failed to create event for booking {request_id}: {exc}")
 
     updated_booking = service.decide_booking_request(
         request_id=request_id, payload=payload)
@@ -365,13 +394,14 @@ def decide_booking_request(
 
         def _notify_decision():
             try:
-                send_email(
-                    email_receiver=requester["email"],
+                _send_email_notification(
+                    recipients=[requester["email"]],
                     subject=f"[CSIS SmartAssist] Booking request {decision_word}",
                     body=body,
                 )
-                send_email(
-                    email_receiver=settings.admin_receiver_email,
+                _send_email_notification(
+                    recipients=[
+                        settings.admin_receiver_email] if settings.admin_receiver_email else [],
                     subject=f"[CSIS SmartAssist] Booking request {decision_word}",
                     body=(
                         "CSIS SmartAssist booking request has been confirmed.\n\n"
@@ -390,44 +420,51 @@ def decide_booking_request(
 
     if calendar_event_link:
         updated_booking["calendar_event_link"] = calendar_event_link
+    if calendar_event_error:
+        updated_booking["calendar_event_error"] = calendar_event_error
 
     return updated_booking
-
-
-@app.post("/rag/documents")
-def create_rag_document(
-    payload: RagDocumentCreateIn,
-    service: SupabaseService = Depends(get_supabase_service),
-) -> dict:
-    return service.create_rag_document(payload)
-
-
-@app.post("/rag/chunks")
-def create_rag_chunk(
-    payload: RagChunkCreateIn,
-    service: SupabaseService = Depends(get_supabase_service),
-) -> dict:
-    return service.create_rag_chunk(payload)
 
 
 @app.post("/rag/chunks/search")
 def search_rag_chunks(
     payload: RagSearchIn,
-    service: SupabaseService = Depends(get_supabase_service),
 ) -> list[dict]:
-    return service.search_rag_chunks(payload)
+    return search_rag_collection(
+        query_embedding=payload.embedding,
+        match_count=payload.match_count,
+    )
 
 
 @app.post("/rag/ingest-local")
 def ingest_local_rag_data(
-    service: SupabaseService = Depends(get_supabase_service),
 ) -> dict:
-    from app.rag_local_ingest import sync_local_rag_data_folder
+    raise HTTPException(
+        status_code=410, detail="Local data folder ingestion removed; use /rag/ingest-drive")
 
-    return sync_local_rag_data_folder(
-        service=service,
-        data_dir=settings.rag_local_data_dir,
+
+@app.post("/rag/ingest-drive")
+def ingest_google_drive_rag_data(
+    payload: RagDriveIngestIn,
+) -> dict:
+    from app.rag_local_ingest import sync_google_drive_rag_folder
+
+    folder_id = (
+        payload.folder_id or settings.google_drive_folder_id or "").strip()
+    if not folder_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Google Drive folder ID is required. Set payload.folder_id or GOOGLE_DRIVE_FOLDER_ID.",
+        )
+
+    drive_service = get_google_drive_client(settings)
+    return sync_google_drive_rag_folder(
+        drive_service=drive_service,
+        folder_id=folder_id,
         vector_dimensions=settings.vector_dimensions,
+        recursive=payload.recursive,
+        max_files=payload.max_files,
+        gemini_api_key=settings.gemini_api_key,
     )
 
 

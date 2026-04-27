@@ -13,11 +13,21 @@ except Exception:  # pragma: no cover
     docx = None
 
 try:
+    from pdfminer.high_level import extract_text as pdfminer_extract_text
+except Exception:  # pragma: no cover
+    pdfminer_extract_text = None
+
+try:
     import PyPDF2
 except Exception:  # pragma: no cover
     PyPDF2 = None
 
-from .services import SupabaseService
+from googleapiclient.discovery import Resource
+from googleapiclient.http import MediaIoBaseDownload
+
+from .rag_store import get_rag_collection
+from .rag_store import get_source_metadata
+from .rag_store import replace_source_chunks
 
 import os as _os
 _os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
@@ -52,6 +62,16 @@ def _gemini_embed(texts: list[str], api_key: str) -> list[list[float]]:
 
 
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".html", ".htm", ".txt", ".md"}
+SUPPORTED_DRIVE_MIME_TYPES = {
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/html",
+    "text/plain",
+    "text/markdown",
+    "application/vnd.google-apps.document",
+    "application/vnd.google-apps.spreadsheet",
+    "application/vnd.google-apps.presentation",
+}
 
 
 def _infer_mime_type(path: Path) -> str:
@@ -70,11 +90,20 @@ def _infer_mime_type(path: Path) -> str:
 def _extract_text(raw: bytes, mime_type: str) -> str:
     extracted = ""
     if "pdf" in mime_type:
-        if PyPDF2 is None:
-            return ""
-        reader = PyPDF2.PdfReader(io.BytesIO(raw))
-        extracted = "\n".join((page.extract_text() or "")
-                              for page in reader.pages)
+        if PyPDF2 is not None:
+            try:
+                reader = PyPDF2.PdfReader(io.BytesIO(raw), strict=False)
+                extracted = "\n".join(
+                    (page.extract_text() or "") for page in reader.pages
+                )
+            except Exception:
+                extracted = ""
+
+        if not extracted.strip() and pdfminer_extract_text is not None:
+            try:
+                extracted = pdfminer_extract_text(io.BytesIO(raw)) or ""
+            except Exception:
+                extracted = ""
     elif "word" in mime_type or "document" in mime_type:
         if docx is None:
             return ""
@@ -91,6 +120,29 @@ def _extract_text(raw: bytes, mime_type: str) -> str:
     else:
         extracted = raw.decode("utf-8", errors="ignore")
     return extracted.strip()
+
+
+def _extract_drive_text(raw: bytes, mime_type: str, fallback_name: str) -> str:
+    normalized_mime = mime_type.lower()
+    if normalized_mime == "application/vnd.google-apps.spreadsheet":
+        normalized_mime = "text/plain"
+    if normalized_mime == "application/vnd.google-apps.presentation":
+        normalized_mime = "application/pdf"
+
+    if normalized_mime in {"text/plain", "text/markdown", "text/csv"}:
+        normalized_mime = "text/plain"
+    elif normalized_mime in {"text/html"}:
+        normalized_mime = "text/html"
+    elif normalized_mime in {
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }:
+        pass
+    else:
+        suffix = Path(fallback_name).suffix.lower()
+        normalized_mime = _infer_mime_type(Path(f"unknown{suffix}"))
+
+    return _extract_text(raw=raw, mime_type=normalized_mime)
 
 
 def _chunk_text(text: str, chunk_size: int = 140, overlap: int = 30) -> list[str]:
@@ -123,10 +175,141 @@ def _resolve_data_dir(data_dir: str) -> Path:
     return (backend_root / candidate).resolve()
 
 
+def _store_text_source(
+    *,
+    collection,
+    source_uri: str,
+    title: str,
+    text: str,
+    raw: bytes,
+    gemini_api_key: str,
+    metadata: dict[str, Any],
+    chunk_size: int = 140,
+    overlap: int = 30,
+) -> int:
+    content_hash = _file_hash(raw)
+    existing_metadata = get_source_metadata(collection, source_uri)
+    if (existing_metadata or {}).get("content_hash") == content_hash:
+        return 0
+
+    if not text.strip():
+        raise ValueError("No text extracted")
+
+    chunks = _chunk_text(text, chunk_size=chunk_size, overlap=overlap)
+    if not chunks:
+        raise ValueError("No chunks created")
+
+    embeddings = _gemini_embed(chunks, gemini_api_key)
+
+    return replace_source_chunks(
+        collection,
+        source_uri=source_uri,
+        title=title,
+        chunks=chunks,
+        embeddings=embeddings,
+        metadata={
+            **metadata,
+            "content_hash": content_hash,
+            "updated_at": datetime.now(UTC).isoformat(),
+        },
+    )
+
+
+def _drive_export_mime_type(file_mime_type: str) -> str | None:
+    if file_mime_type == "application/vnd.google-apps.document":
+        return "text/plain"
+    if file_mime_type == "application/vnd.google-apps.spreadsheet":
+        return "text/csv"
+    if file_mime_type == "application/vnd.google-apps.presentation":
+        return "application/pdf"
+    return None
+
+
+def _download_drive_file(
+    drive_service: Resource,
+    file_id: str,
+    file_mime_type: str,
+) -> bytes:
+    export_mime = _drive_export_mime_type(file_mime_type)
+    if export_mime:
+        request = drive_service.files().export_media(
+            fileId=file_id,
+            mimeType=export_mime,
+        )
+    else:
+        request = drive_service.files().get_media(fileId=file_id)
+
+    buffer = io.BytesIO()
+    downloader = MediaIoBaseDownload(buffer, request)
+
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+
+    return buffer.getvalue()
+
+
+def _list_drive_files(
+    drive_service: Resource,
+    folder_id: str,
+    recursive: bool,
+    max_files: int,
+) -> list[dict[str, Any]]:
+    queue = [folder_id]
+    seen_folders: set[str] = set()
+    files: list[dict[str, Any]] = []
+
+    while queue and len(files) < max_files:
+        current_folder_id = queue.pop(0)
+        if current_folder_id in seen_folders:
+            continue
+        seen_folders.add(current_folder_id)
+
+        page_token = None
+        while len(files) < max_files:
+            response = (
+                drive_service.files()
+                .list(
+                    q=f"'{current_folder_id}' in parents and trashed = false",
+                    fields=(
+                        "nextPageToken,"
+                        "files(id,name,mimeType,modifiedTime,md5Checksum,parents)"
+                    ),
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True,
+                    pageToken=page_token,
+                    pageSize=200,
+                )
+                .execute()
+            )
+
+            for item in response.get("files", []):
+                item_mime = item.get("mimeType", "")
+                if item_mime == "application/vnd.google-apps.folder":
+                    if recursive:
+                        queue.append(item["id"])
+                    continue
+
+                if item_mime not in SUPPORTED_DRIVE_MIME_TYPES:
+                    continue
+
+                files.append(item)
+                if len(files) >= max_files:
+                    break
+
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
+
+    return files
+
+
 def sync_local_rag_data_folder(
-    service: SupabaseService,
     data_dir: str,
     vector_dimensions: int,
+    gemini_api_key: str | None = None,
+    chunk_size: int = 140,
+    overlap: int = 30,
 ) -> dict[str, Any]:
     base_path = _resolve_data_dir(data_dir)
     summary: dict[str, Any] = {
@@ -143,7 +326,12 @@ def sync_local_rag_data_folder(
         summary["errors"].append(f"Data directory not found: {base_path}")
         return summary
 
-    default_embedding = [0.0] * vector_dimensions
+    if not gemini_api_key:
+        summary["errors"].append(
+            "GEMINI_API_KEY not set; skipping RAG ingestion")
+        return summary
+
+    collection = get_rag_collection()
 
     for path in sorted(base_path.rglob("*")):
         if not path.is_file():
@@ -156,60 +344,28 @@ def sync_local_rag_data_folder(
         summary["processed_files"] += 1
         try:
             raw = path.read_bytes()
-            content_hash = _file_hash(raw)
             relative_path = path.relative_to(base_path).as_posix()
             source_uri = f"local://data/{relative_path}"
-
-            existing = (
-                service.client.table("rag_documents")
-                .select("id,metadata")
-                .eq("source_uri", source_uri)
-                .limit(1)
-                .execute()
-            )
-            existing_row = existing.data[0] if existing.data else None
-            existing_hash = ((existing_row or {}).get(
-                "metadata") or {}).get("content_hash")
-
-            if existing_hash == content_hash:
-                summary["skipped_unchanged"] += 1
-                continue
-
             text = _extract_text(raw, _infer_mime_type(path))
-            if not text.strip():
-                summary["errors"].append(
-                    f"No text extracted from {relative_path}")
-                continue
-
-            chunks = _chunk_text(text)
-            if not chunks:
-                summary["errors"].append(
-                    f"No chunks created from {relative_path}")
-                continue
-
-            document = service.upsert_rag_document_by_source(
-                title=path.name,
+            written = _store_text_source(
+                collection=collection,
                 source_uri=source_uri,
+                title=path.name,
+                text=text,
+                raw=raw,
+                gemini_api_key=gemini_api_key,
                 metadata={
                     "ingest_source": "local_data_folder",
                     "relative_path": relative_path,
-                    "content_hash": content_hash,
-                    "updated_at": datetime.now(UTC).isoformat(),
                 },
+                chunk_size=chunk_size,
+                overlap=overlap,
             )
-
-            written = service.replace_rag_chunks_for_document(
-                document_id=document["id"],
-                chunks=chunks,
-                embedding=default_embedding,
-                metadata={
-                    "relative_path": relative_path,
-                    "ingest_source": "local_data_folder",
-                },
-            )
-
-            summary["ingested_files"] += 1
-            summary["chunks_written"] += written
+            if written == 0:
+                summary["skipped_unchanged"] += 1
+            else:
+                summary["ingested_files"] += 1
+                summary["chunks_written"] += written
         except Exception as exc:
             summary["errors"].append(f"{path.name}: {exc}")
 
@@ -224,80 +380,94 @@ def sync_local_rag_to_chromadb(
     overlap: int = 30,
     gemini_api_key: str | None = None,
 ) -> dict[str, Any]:
-    """Ingest local documents into ChromaDB with Gemini embeddings.
+    raise NotImplementedError(
+        "Local data folder ingestion has been removed; use Google Drive ingestion instead.")
 
-    Uses Gemini text-embedding-004 instead of a local SentenceTransformer
-    model to stay within Render free-tier memory limits.
-    """
+
+def sync_google_drive_rag_folder(
+    drive_service: Resource,
+    folder_id: str,
+    vector_dimensions: int,
+    recursive: bool = True,
+    max_files: int = 500,
+    gemini_api_key: str | None = None,
+) -> dict[str, Any]:
     summary: dict[str, Any] = {
-        "data_dir": data_dir,
+        "folder_id": folder_id,
         "processed_files": 0,
-        "chunks_stored": 0,
+        "ingested_files": 0,
+        "skipped_unchanged": 0,
         "skipped_unsupported": 0,
+        "chunks_written": 0,
         "errors": [],
     }
 
-    if chromadb is None:
-        summary["errors"].append("chromadb is not installed")
+    if not folder_id.strip():
+        summary["errors"].append("Google Drive folder_id is empty")
         return summary
+
     if not gemini_api_key:
         summary["errors"].append(
-            "GEMINI_API_KEY not set; skipping ChromaDB ingestion")
+            "GEMINI_API_KEY not set; skipping RAG ingestion")
         return summary
 
-    base_path = _resolve_data_dir(data_dir)
-    if not base_path.exists() or not base_path.is_dir():
-        summary["errors"].append(f"Data directory not found: {base_path}")
+    collection = get_rag_collection()
+
+    try:
+        drive_files = _list_drive_files(
+            drive_service=drive_service,
+            folder_id=folder_id,
+            recursive=recursive,
+            max_files=max_files,
+        )
+    except Exception as exc:
+        summary["errors"].append(f"Failed to list Drive files: {exc}")
         return summary
 
-    client = chromadb.PersistentClient(path=db_path)
-    collection = client.get_or_create_collection(name=collection_name)
+    for drive_file in drive_files:
+        summary["processed_files"] += 1
+        file_id = str(drive_file.get("id"))
+        file_name = str(drive_file.get("name") or file_id)
+        file_mime_type = str(drive_file.get("mimeType") or "")
+        modified_time = str(drive_file.get("modifiedTime") or "")
+        source_uri = f"gdrive://{file_id}"
 
-    # If collection already has data, skip re-ingestion
-    if collection.count() > 0:
-        summary["chunks_stored"] = collection.count()
-        summary["errors"].append(
-            "Collection already populated; skipping ingestion")
-        return summary
-
-    all_chunks: list[str] = []
-    all_ids: list[str] = []
-    chunk_counter = 0
-
-    for path in sorted(base_path.rglob("*")):
-        if not path.is_file():
-            continue
-        if path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+        if file_mime_type not in SUPPORTED_DRIVE_MIME_TYPES:
             summary["skipped_unsupported"] += 1
             continue
 
-        summary["processed_files"] += 1
         try:
-            raw = path.read_bytes()
-            text = _extract_text(raw, _infer_mime_type(path))
-            if not text.strip():
-                summary["errors"].append(f"No text extracted from {path.name}")
-                continue
+            raw = _download_drive_file(
+                drive_service=drive_service,
+                file_id=file_id,
+                file_mime_type=file_mime_type,
+            )
+            text = _extract_drive_text(
+                raw=raw,
+                mime_type=file_mime_type,
+                fallback_name=file_name,
+            )
+            written = _store_text_source(
+                collection=collection,
+                source_uri=source_uri,
+                title=file_name,
+                text=text,
+                raw=raw,
+                gemini_api_key=gemini_api_key,
+                metadata={
+                    "ingest_source": "google_drive",
+                    "google_drive_file_id": file_id,
+                    "google_drive_mime_type": file_mime_type,
+                    "google_drive_modified_time": modified_time,
+                },
+            )
 
-            chunks = _chunk_text(text, chunk_size=chunk_size, overlap=overlap)
-            for chunk in chunks:
-                all_chunks.append(chunk)
-                all_ids.append(f"chunk_{chunk_counter}")
-                chunk_counter += 1
+            if written == 0:
+                summary["skipped_unchanged"] += 1
+            else:
+                summary["ingested_files"] += 1
+                summary["chunks_written"] += written
         except Exception as exc:
-            summary["errors"].append(f"{path.name}: {exc}")
-
-    if all_chunks:
-        try:
-            embeddings = _gemini_embed(all_chunks, gemini_api_key)
-        except Exception as exc:
-            summary["errors"].append(f"Gemini embedding failed: {exc}")
-            return summary
-        collection.add(
-            embeddings=embeddings,
-            documents=all_chunks,
-            ids=all_ids,
-        )
-        summary["chunks_stored"] = len(all_chunks)
+            summary["errors"].append(f"{file_name}: {exc}")
 
     return summary
