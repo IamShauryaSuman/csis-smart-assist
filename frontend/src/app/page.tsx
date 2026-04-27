@@ -783,14 +783,14 @@ function HomePage() {
   return (
     <div className="relative min-h-screen bg-bg-base text-text-primary lg:h-screen lg:overflow-hidden">
       {/* Animated Polyhedron Sphere Background */}
-      <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center opacity-10">
+      <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center opacity-30">
         <svg
           className="w-[1200px] max-w-[200vw] animate-spin"
           viewBox="0 0 200 200"
           xmlns="http://www.w3.org/2000/svg"
           style={{ animationDuration: "120s" }}
         >
-          <g stroke="currentColor" strokeWidth="0.5" fill="none" className="text-text-secondary opacity-70">
+          <g stroke="currentColor" strokeWidth="0.5" fill="none" className="text-text-secondary opacity-100">
             {/* Outer boundary */}
             <circle cx="100" cy="100" r="90" />
             
@@ -1047,7 +1047,7 @@ function HomePage() {
         <main className="grid min-h-[calc(100vh-57px)] grid-cols-1 lg:h-[calc(100vh-57px)] lg:min-h-0 lg:grid-cols-12 relative z-10 w-full overflow-hidden">
           <aside
             id="history-sidebar"
-            className={`${isHistoryOpen ? "flex" : "hidden"} min-h-0 flex-col overflow-hidden border-b border-border lg:col-span-3 lg:flex lg:border-b-0 lg:border-r bg-bg-base/40 backdrop-blur-xl`}
+            className={`${isHistoryOpen ? "flex" : "hidden"} min-h-0 flex-col overflow-hidden border-b border-border lg:col-span-3 lg:flex lg:border-b-0 lg:border-r bg-bg-surface bg-opacity-10 backdrop-blur-sm`}
           >
             <div className="flex items-center justify-between border-b border-border bg-bg-surface/50 backdrop-blur-md px-4 py-2 font-mono text-sm text-text-secondary">
               <span>History</span>
@@ -1090,7 +1090,7 @@ function HomePage() {
             </div>
           </aside>
 
-          <section className="flex min-h-[55vh] flex-col border-b border-border lg:col-span-9 lg:min-h-0 lg:overflow-hidden lg:border-b-0 lg:border-r bg-bg-base/20 backdrop-blur-md">
+          <section className="flex min-h-[55vh] flex-col border-b border-border lg:col-span-9 lg:min-h-0 lg:overflow-hidden lg:border-b-0 lg:border-r bg-bg-surface bg-opacity-5 backdrop-blur-sm">
             <div className="flex items-center justify-between border-b border-border bg-bg-surface/50 backdrop-blur-md px-4 py-2 font-mono text-sm text-text-secondary md:px-6">
               <span>Chat</span>
               <div className="flex items-center gap-2 lg:hidden">
@@ -1282,7 +1282,7 @@ function HomePage() {
                   onChange={(event) => setInput(event.target.value)}
                   disabled={isLoading}
                   placeholder="Ask about policies, citations, or room booking..."
-                  className="h-11 flex-1 border border-border bg-bg-base/60 backdrop-blur-sm px-3 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-link disabled:opacity-60"
+                  className="h-11 flex-1 border border-border bg-bg-surface bg-opacity-20 backdrop-blur-sm px-3 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-link disabled:opacity-60"
                 />
                 <button
                   type="submit"
