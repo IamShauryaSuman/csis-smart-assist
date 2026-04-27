@@ -672,20 +672,110 @@ function HomePage() {
 
   if (!session) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-bg-base px-4 text-center">
-        <h1 className="font-display text-3xl font-semibold text-text-primary md:text-4xl">
-          CSIS SmartAssist
-        </h1>
-        <p className="mt-3 max-w-xl text-sm text-text-secondary md:text-base">
-          Secure campus assistant with document-grounded responses and smart
-          booking requests.
-        </p>
-        <button
-          onClick={() => signIn("google")}
-          className="mt-8 border border-accent bg-accent px-6 py-3 text-sm font-medium text-bg-base transition hover:brightness-110"
-        >
-          Sign in with Google
-        </button>
+      <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-bg-base px-4 text-center">
+        {/* Animated Polyhedron Sphere Background */}
+        <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center opacity-20">
+          <svg
+            className="w-[1200px] max-w-[200vw] animate-spin"
+            viewBox="0 0 200 200"
+            xmlns="http://www.w3.org/2000/svg"
+            style={{ animationDuration: "120s" }}
+          >
+            <g stroke="currentColor" strokeWidth="0.5" fill="none" className="text-text-secondary opacity-70">
+              {/* Outer boundary */}
+              <circle cx="100" cy="100" r="90" />
+              
+              {/* Geodesic/Polyhedron style intersecting geometric lines */}
+              <polygon points="10,100 40,40 100,10 160,40 190,100 160,160 100,190 40,160" />
+              <polygon points="28,56 64,28 136,28 172,56 172,144 136,172 64,172 28,144" />
+              <polygon points="46,100 64,64 100,46 136,64 154,100 136,136 100,154 64,136" />
+              
+              {/* Cross sections */}
+              <line x1="100" y1="10" x2="100" y2="190" />
+              <line x1="10" y1="100" x2="190" y2="100" />
+              <line x1="36" y1="36" x2="164" y2="164" />
+              <line x1="36" y1="164" x2="164" y2="36" />
+              
+              {/* Vertical and horizontal chords */}
+              <line x1="64" y1="28" x2="64" y2="172" />
+              <line x1="136" y1="28" x2="136" y2="172" />
+              <line x1="28" y1="56" x2="172" y2="56" />
+              <line x1="28" y1="144" x2="172" y2="144" />
+
+              {/* Triangle meshes to create 3D illusion */}
+              <path d="M100 10 L64 64 L100 100 L136 64 Z" />
+              <path d="M100 190 L64 136 L100 100 L136 136 Z" />
+              <path d="M10 100 L64 64 L100 100 L64 136 Z" />
+              <path d="M190 100 L136 64 L100 100 L136 136 Z" />
+              
+              {/* Vertices/Points */}
+              <g fill="currentColor" stroke="none">
+                <circle cx="100" cy="10" r="1.5" />
+                <circle cx="100" cy="190" r="1.5" />
+                <circle cx="10" cy="100" r="1.5" />
+                <circle cx="190" cy="100" r="1.5" />
+                
+                <circle cx="36" cy="36" r="1.5" />
+                <circle cx="164" cy="164" r="1.5" />
+                <circle cx="36" cy="164" r="1.5" />
+                <circle cx="164" cy="36" r="1.5" />
+                
+                <circle cx="40" cy="40" r="1.5" />
+                <circle cx="160" cy="40" r="1.5" />
+                <circle cx="160" cy="160" r="1.5" />
+                <circle cx="40" cy="160" r="1.5" />
+                
+                <circle cx="28" cy="56" r="1.5" />
+                <circle cx="172" cy="56" r="1.5" />
+                <circle cx="172" cy="144" r="1.5" />
+                <circle cx="28" cy="144" r="1.5" />
+                
+                <circle cx="64" cy="28" r="1.5" />
+                <circle cx="136" cy="28" r="1.5" />
+                <circle cx="136" cy="172" r="1.5" />
+                <circle cx="64" cy="172" r="1.5" />
+                
+                <circle cx="46" cy="100" r="1.5" />
+                <circle cx="154" cy="100" r="1.5" />
+                <circle cx="100" cy="46" r="1.5" />
+                <circle cx="100" cy="154" r="1.5" />
+                
+                <circle cx="64" cy="64" r="1.5" />
+                <circle cx="136" cy="64" r="1.5" />
+                <circle cx="136" cy="136" r="1.5" />
+                <circle cx="64" cy="136" r="1.5" />
+                
+                <circle cx="100" cy="100" r="2" />
+              </g>
+            </g>
+          </svg>
+        </div>
+
+        <div className="z-10 flex w-full max-w-xl flex-col items-center rounded-xl border border-border bg-bg-surface bg-opacity-5 p-8 backdrop-blur-sm md:p-12 shadow-2xl">
+          <div className="mb-3 font-mono text-xl tracking-[0.2em] text-text-primary md:text-2xl">
+            CSIS
+          </div>
+          <h1 className="font-display text-4xl font-bold tracking-tight text-accent md:text-5xl">
+            SmartAssist
+          </h1>
+          <p className="mt-3 font-mono text-xs uppercase tracking-widest text-text-secondary md:mt-4 md:text-sm">
+            BITS Pilani, K K Birla Goa Campus
+          </p>
+          
+          <div className="my-8 h-px w-24 bg-border" />
+          
+          <p className="max-w-sm text-sm text-text-secondary md:text-base leading-relaxed">
+            Secure campus assistant with document-grounded responses and smart
+            booking requests.
+          </p>
+          
+          <button
+            onClick={() => signIn("google")}
+            className="mt-10 border border-accent bg-accent/10 px-8 py-3.5 font-mono text-sm font-semibold tracking-wider text-accent transition-all hover:bg-accent hover:text-bg-base hover:shadow-[0_0_15px_rgba(128,252,104,0.3)]"
+          >
+            SIGN IN WITH GOOGLE
+          </button>
+        </div>
       </div>
     );
   }
