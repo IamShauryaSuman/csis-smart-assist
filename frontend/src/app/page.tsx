@@ -674,7 +674,7 @@ function HomePage() {
     return (
       <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-bg-base px-4 text-center">
         {/* Animated Polyhedron Sphere Background */}
-        <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center opacity-20">
+        <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden opacity-20">
           <svg
             className="w-[1200px] max-w-[200vw] animate-spin"
             viewBox="0 0 200 200"
@@ -781,9 +781,9 @@ function HomePage() {
   }
 
   return (
-    <div className="relative min-h-screen bg-bg-base text-text-primary lg:h-screen lg:overflow-hidden">
+    <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-bg-base text-text-primary">
       {/* Animated Polyhedron Sphere Background */}
-      <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center opacity-30">
+      <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden opacity-30">
         <svg
           className="w-[1200px] max-w-[200vw] animate-spin"
           viewBox="0 0 200 200"
@@ -880,7 +880,7 @@ function HomePage() {
       </header>
 
       {isAdmin ? (
-        <main className="min-h-[calc(100vh-57px)] px-4 py-4 md:px-6 md:py-6 relative z-10 w-full overflow-y-auto">
+        <main className="relative z-10 w-full flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-6">
           <div className="mb-4 border border-border bg-bg-surface/60 backdrop-blur-md px-4 py-3 shadow-lg">
             <h2 className="font-display text-lg font-semibold md:text-xl">
               Booking Requests Dashboard
@@ -1043,10 +1043,10 @@ function HomePage() {
           </div>
         </main>
       ) : (
-        <main className="grid min-h-[calc(100vh-57px)] grid-cols-1 lg:h-[calc(100vh-57px)] lg:min-h-0 lg:grid-cols-12 relative z-10 w-full overflow-hidden">
+        <main className="relative z-10 flex w-full flex-1 flex-col overflow-hidden min-h-0 lg:grid lg:grid-cols-12">
           <aside
             id="history-sidebar"
-            className={`${isHistoryOpen ? "flex" : "hidden"} min-h-0 flex-col overflow-hidden border-b border-border lg:col-span-3 lg:flex lg:border-b-0 lg:border-r bg-bg-surface bg-opacity-10 backdrop-blur-sm`}
+            className={`${isHistoryOpen ? "flex" : "hidden"} h-[40vh] min-h-0 shrink-0 flex-col overflow-hidden border-b border-border lg:h-auto lg:col-span-3 lg:flex lg:border-b-0 lg:border-r bg-bg-surface bg-opacity-10 backdrop-blur-sm`}
           >
             <div className="flex items-center justify-between border-b border-border bg-bg-surface/50 backdrop-blur-md px-4 py-2 font-mono text-sm text-text-secondary">
               <span>History</span>
@@ -1089,7 +1089,7 @@ function HomePage() {
             </div>
           </aside>
 
-          <section className="flex min-h-[55vh] flex-col border-b border-border lg:col-span-9 lg:min-h-0 lg:overflow-hidden lg:border-b-0 lg:border-r bg-bg-surface bg-opacity-5 backdrop-blur-sm">
+          <section className="flex flex-1 flex-col overflow-hidden border-b border-border bg-bg-surface bg-opacity-5 backdrop-blur-sm lg:col-span-9 lg:min-h-0 lg:border-b-0 lg:border-r">
             <div className="flex items-center justify-between border-b border-border bg-bg-surface/50 backdrop-blur-md px-4 py-2 font-mono text-sm text-text-secondary md:px-6">
               <span>Chat</span>
               <div className="flex items-center gap-2 lg:hidden">
@@ -1103,7 +1103,7 @@ function HomePage() {
                 </button>
               </div>
             </div>
-            <div className="ui-scrollbar lg:min-h-0 lg:flex-1 lg:overflow-y-auto px-4 py-4 md:px-6">
+            <div className="ui-scrollbar flex-1 overflow-y-auto px-4 py-4 md:px-6">
               {messages?.map((message) => (
                 <article
                   key={message.id}
