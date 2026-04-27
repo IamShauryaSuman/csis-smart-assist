@@ -43,9 +43,10 @@ def _google_embed(texts: list[str], api_key: str) -> list[list[float]]:
     # Google supports batching
     try:
         result = genai.embed_content(
-            model="models/embedding-001",
+            model="models/gemini-embedding-2",
             content=texts,
             task_type="retrieval_document",
+            output_dimensionality=768,
         )
         return result["embedding"]
     except Exception as exc:
@@ -122,10 +123,31 @@ def _extract_text(raw: bytes, mime_type: str) -> str:
     return extracted.strip()
 
 
-def _chunk_text(text: str, chunk_size: int = 140, overlap: int = 30) -> list[str]:
+def _chunk_text(text: str, chunk_size: int = 300, overlap: int = 60) -> list[str]:
     words = text.split()
     if not words:
         return []
+
+    # Detect header: take the first line(s) up to a reasonable length as context prefix.
+    # This ensures tabular data always has column headers in every chunk.
+    lines = text.split("\n")
+    header_lines: list[str] = []
+    header_word_count = 0
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        line_words = stripped.split()
+        # Stop collecting header once we've got enough context or hit data rows
+        if header_word_count + len(line_words) > 60:
+            break
+        header_lines.append(stripped)
+        header_word_count += len(line_words)
+        # If we found column-like headers (multiple short fields), stop
+        if header_word_count >= 15:
+            break
+
+    header_prefix = " | ".join(header_lines).strip()
 
     step = max(chunk_size - overlap, 1)
     chunks: list[str] = []
@@ -133,7 +155,11 @@ def _chunk_text(text: str, chunk_size: int = 140, overlap: int = 30) -> list[str
         segment = words[index:index + chunk_size]
         if not segment:
             continue
-        chunks.append(" ".join(segment).strip())
+        chunk_text = " ".join(segment).strip()
+        # Prepend header to non-first chunks so they have column context
+        if index > 0 and header_prefix:
+            chunk_text = f"[Context: {header_prefix}]\n{chunk_text}"
+        chunks.append(chunk_text)
         if index + chunk_size >= len(words):
             break
     return chunks
@@ -281,12 +307,19 @@ def sync_local_rag_to_chromadb(
         summary["errors"].append(f"Failed to get ChromaDB collection: {exc}")
         return summary
 
-
-    # If collection already has data, skip re-ingestion
+    # Check if existing embeddings are zero-vectors (broken previous ingestion)
     if collection.count() > 0:
-        summary["chunks_stored"] = collection.count()
-        summary["status"] = "Collection already populated; skipping ingestion"
-        return summary
+        try:
+            sample = collection.peek(limit=1)
+            sample_emb = (sample.get("embeddings") or [[]])[0]
+            if sample_emb and all(v == 0.0 for v in sample_emb):
+                print("[RAG ChromaDB] Detected zero-vector embeddings — clearing collection for re-ingestion")
+                # Delete all existing chunks
+                all_ids = collection.get()["ids"]
+                if all_ids:
+                    collection.delete(ids=all_ids)
+        except Exception as exc:
+            print(f"[RAG ChromaDB] Error checking embeddings: {exc}")
 
     all_chunks: list[str] = []
     all_ids: list[str] = []
@@ -329,7 +362,7 @@ def sync_local_rag_to_chromadb(
         except Exception as exc:
             summary["errors"].append(f"Embedding failed: {exc}")
             return summary
-        collection.add(
+        collection.upsert(
             embeddings=embeddings,
             documents=all_chunks,
             ids=all_ids,

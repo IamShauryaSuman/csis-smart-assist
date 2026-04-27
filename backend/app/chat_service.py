@@ -47,11 +47,12 @@ class ChatService:
                 model="models/gemini-embedding-2",
                 content=text,
                 task_type="retrieval_query",
+                output_dimensionality=768,
             )
             return result["embedding"]
         except Exception as exc:
             logger.error(f"[Gemini Embed] Error: {exc}")
-            return [0.0] * self.settings.vector_dimensions
+            return [0.0] * 768
 
     def _embed_query_ollama(self, text: str) -> list[float]:
         """Generate embeddings using Ollama's embedding API."""

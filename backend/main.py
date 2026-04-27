@@ -11,6 +11,9 @@ from zoneinfo import ZoneInfo
 from calender.functions import *
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+import logging
+
+logger = logging.getLogger(__name__)
 
 from app.chat_service import ChatService
 from app.config import get_settings
@@ -118,34 +121,101 @@ app.add_middleware(
 )
 
 
+def _send_via_gmail_api(
+    email_receiver: str,
+    subject: str,
+    body: str,
+    html: str | None = None,
+) -> None:
+    """Send email using Gmail API with OAuth credentials (no App Password needed)."""
+    import base64
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+
+    sender = settings.google_sender_email
+    creds = Credentials(
+        token=None,
+        refresh_token=settings.google_refresh_token,
+        token_uri=settings.google_token_uri,
+        client_id=settings.google_client_id,
+        client_secret=settings.google_client_secret,
+        scopes=["https://www.googleapis.com/auth/gmail.send"],
+    )
+    gmail_service = build("gmail", "v1", credentials=creds)
+
+    if html:
+        message = MIMEMultipart("alternative")
+        message.attach(MIMEText(body, "plain"))
+        message.attach(MIMEText(html, "html"))
+    else:
+        message = MIMEText(body)
+
+    message["to"] = email_receiver
+    message["from"] = sender
+    message["subject"] = subject
+
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+    gmail_service.users().messages().send(
+        userId="me", body={"raw": raw}
+    ).execute()
+
+
 def send_email(
     email_receiver: str,
     subject: str,
     body: str,
     html: str | None = None,
 ) -> None:
-    smtp_sender_email = settings.smtp_sender_email or settings.google_sender_email
+    if not email_receiver:
+        logger.warning("[Email] Skipping: no recipient address provided")
+        return
+
+    sender = settings.smtp_sender_email or settings.google_sender_email
+    if not sender:
+        logger.warning("[Email] Skipping: no sender email configured")
+        return
+
+    # Try Gmail API first (uses existing OAuth credentials, no App Password needed)
+    has_oauth = all([
+        settings.google_refresh_token,
+        settings.google_client_id,
+        settings.google_client_secret,
+        settings.google_sender_email,
+    ])
+
+    if has_oauth:
+        try:
+            _send_via_gmail_api(email_receiver, subject, body, html)
+            logger.info(f"[Email] Sent via Gmail API to {email_receiver}: {subject}")
+            return
+        except Exception as exc:
+            logger.warning(f"[Email] Gmail API failed, trying SMTP: {exc}")
+
+    # Fallback: SMTP (requires SMTP_SENDER_PASSWORD)
     smtp_sender_password = settings.smtp_sender_password
-    
-    if not smtp_sender_email or not smtp_sender_password:
-        print(f"[Email] Skipping send to {email_receiver}: Missing SMTP credentials")
+    if not smtp_sender_password:
+        logger.warning(f"[Email] Skipping send to {email_receiver}: "
+                       f"Gmail API unavailable and SMTP password not set")
         return
 
     message = EmailMessage()
-    message["From"] = smtp_sender_email
+    message["From"] = sender
     message["To"] = email_receiver
     message["Subject"] = subject
     message.set_content(body)
-    
+
     if html:
         message.add_alternative(html, subtype="html")
 
     try:
         with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port) as smtp_client:
-            smtp_client.login(smtp_sender_email, smtp_sender_password)
+            smtp_client.login(sender, smtp_sender_password)
             smtp_client.send_message(message)
+        logger.info(f"[Email] Sent via SMTP to {email_receiver}: {subject}")
     except Exception as exc:
-        print(f"[Email] Failed to send email to {email_receiver}: {exc}")
+        logger.error(f"[Email] SMTP failed to {email_receiver}: {exc}")
 
 
 def _send_email_notification(
@@ -262,6 +332,14 @@ def create_booking_request(
     print(f"[Booking] Creating request: user={payload.requester_user_id}, "
           f"location={payload.location}, date={payload.date}, "
           f"time_slot={payload.time_slot}, purpose={payload.purpose}")
+
+    # Validate purpose is not empty/whitespace
+    if not payload.purpose or not payload.purpose.strip():
+        raise HTTPException(
+            status_code=422,
+            detail="Purpose is required. Please enter the reason for this booking.",
+        )
+
     booking = service.create_booking_request(payload)
 
     # admin_seed_emails = {
@@ -341,30 +419,37 @@ def decide_booking_request(
     current_booking = service.get_booking_request_by_id(request_id)
     calendar_event_link: str | None = None
 
+    # Step 1: Try to create calendar event (non-blocking — failure is soft)
     if payload.status == BookingStatus.accepted:
-        start_time, end_time = _parse_booking_slot_to_utc(
-            date_value=str(current_booking["date"]),
-            time_slot=str(current_booking["time_slot"]),
-        )
-        calendar_service, calendar_id = get_calendar_client(settings)
-        calendar_event = create_event(
-            service=calendar_service,
-            calendarID=calendar_id,
-            start_time=start_time,
-            end_time=end_time,
-            title=f"Booking: {current_booking['location']}",
-            description=(
-                f"Request ID: {current_booking['id']}\n"
-                f"Purpose: {current_booking['purpose']}\n"
-                f"Remarks: {payload.remarks or current_booking.get('remarks') or '-'}"
-            ),
-            location=current_booking["location"],
-        )
-        calendar_event_link = calendar_event.get("htmlLink")
+        try:
+            start_time, end_time = _parse_booking_slot_to_utc(
+                date_value=str(current_booking["date"]),
+                time_slot=str(current_booking["time_slot"]),
+            )
+            calendar_service, calendar_id = get_calendar_client(settings)
+            calendar_event = create_event(
+                service=calendar_service,
+                calendarID=calendar_id,
+                start_time=start_time,
+                end_time=end_time,
+                title=f"Booking: {current_booking['location']}",
+                description=(
+                    f"Request ID: {current_booking['id']}\n"
+                    f"Purpose: {current_booking['purpose']}\n"
+                    f"Remarks: {payload.remarks or current_booking.get('remarks') or '-'}"
+                ),
+                location=current_booking["location"],
+            )
+            calendar_event_link = calendar_event.get("htmlLink")
+        except Exception as exc:
+            logger.error(f"[Calendar] Failed to create event for booking {request_id}: {exc}")
+            # Continue — status update and email should still happen
 
+    # Step 2: Update booking status in DB (this MUST succeed)
     updated_booking = service.decide_booking_request(
         request_id=request_id, payload=payload)
 
+    # Step 3: Send email notification (in background thread)
     requester = service.get_user_by_id(updated_booking["requester_user_id"])
     if requester and requester.get("email"):
         decision_word = "approved" if payload.status == BookingStatus.accepted else "declined"
@@ -387,26 +472,45 @@ def decide_booking_request(
                     subject=f"[CSIS SmartAssist] Booking request {decision_word}",
                     body=body,
                 )
-                send_email(
-                    email_receiver=settings.admin_receiver_email,
-                    subject=f"[CSIS SmartAssist] Booking request {decision_word}",
-                    body=(
-                        "CSIS SmartAssist booking request has been confirmed.\n\n"
-                        f"Request ID: {updated_booking['id']}\n"
-                        f"Status: {decision_word}\n"
-                        f"Location: {updated_booking['location']}\n"
-                        f"Date: {updated_booking['date']}\n"
-                        f"Time slot: {updated_booking['time_slot']}\n"
-                        f"Remarks: {payload.remarks or '-'}\n"
-                    ),
-                )
+                if settings.admin_receiver_email:
+                    send_email(
+                        email_receiver=settings.admin_receiver_email,
+                        subject=f"[CSIS SmartAssist] Booking request {decision_word}",
+                        body=(
+                            "CSIS SmartAssist booking request has been confirmed.\n\n"
+                            f"Request ID: {updated_booking['id']}\n"
+                            f"Status: {decision_word}\n"
+                            f"Location: {updated_booking['location']}\n"
+                            f"Date: {updated_booking['date']}\n"
+                            f"Time slot: {updated_booking['time_slot']}\n"
+                            f"Remarks: {payload.remarks or '-'}\n"
+                        ),
+                    )
             except Exception as exc:
-                print(f"[Email] Failed to send decision notification: {exc}")
+                logger.error(f"[Email] Failed to send decision notification: {exc}")
 
         threading.Thread(target=_notify_decision, daemon=True).start()
 
     if calendar_event_link:
         updated_booking["calendar_event_link"] = calendar_event_link
+
+    # Step 4: Update related chat message metadata with booking status
+    try:
+        decision_status = "approved" if payload.status == BookingStatus.accepted else "declined"
+        msg_resp = (
+            service.client.table("chat_messages")
+            .select("id,metadata")
+            .contains("metadata", {"booking_request_id": str(request_id)})
+            .execute()
+        )
+        for msg in (msg_resp.data or []):
+            existing_meta = msg.get("metadata") or {}
+            existing_meta["booking_status"] = decision_status
+            service.client.table("chat_messages").update(
+                {"metadata": existing_meta}
+            ).eq("id", msg["id"]).execute()
+    except Exception as exc:
+        logger.warning(f"[Status Sync] Failed to update chat message for booking {request_id}: {exc}")
 
     return updated_booking
 
@@ -611,44 +715,65 @@ def ingest_drive_data(
         sync_local_rag_to_chromadb,
         sync_google_drive_rag_data
     )
-    
-    # 1. Local Sync
-    local_summary = sync_local_rag_data_folder(
-        service=service,
-        data_dir=settings.rag_local_data_dir,
-        vector_dimensions=settings.vector_dimensions,
-    )
-    chroma_summary = sync_local_rag_to_chromadb(
-        data_dir=settings.rag_local_data_dir,
-        embedding_model=settings.embedding_model,
-    )
-    
-    # 2. Drive Sync (if configured)
-    drive_summary = None
-    if settings.google_drive_folder_id:
-        drive_summary = sync_google_drive_rag_data(
+
+    local_summary: dict = {}
+    chroma_summary: dict = {}
+    drive_summary: dict | None = None
+    top_errors: list[str] = []
+
+    # 1. Local Sync (Supabase)
+    try:
+        local_summary = sync_local_rag_data_folder(
             service=service,
-            folder_id=settings.google_drive_folder_id,
+            data_dir=settings.rag_local_data_dir,
             vector_dimensions=settings.vector_dimensions,
+        )
+    except Exception as exc:
+        logger.error(f"[RAG Ingest] Local sync failed: {exc}")
+        top_errors.append(f"Local sync failed: {exc}")
+
+    # 2. ChromaDB Sync
+    try:
+        chroma_summary = sync_local_rag_to_chromadb(
+            data_dir=settings.rag_local_data_dir,
             embedding_model=settings.embedding_model,
         )
-    
+    except Exception as exc:
+        logger.error(f"[RAG Ingest] ChromaDB sync failed: {exc}")
+        top_errors.append(f"ChromaDB sync failed: {exc}")
+
+    # 3. Drive Sync (if configured)
+    if settings.google_drive_folder_id:
+        try:
+            drive_summary = sync_google_drive_rag_data(
+                service=service,
+                folder_id=settings.google_drive_folder_id,
+                vector_dimensions=settings.vector_dimensions,
+                embedding_model=settings.embedding_model,
+            )
+        except Exception as exc:
+            logger.error(f"[RAG Ingest] Drive sync failed: {exc}")
+            top_errors.append(f"Drive sync failed: {exc}")
+
     # Merge summaries for frontend
-    combined_errors = (local_summary.get("errors", []) + 
-                       chroma_summary.get("errors", []) + 
-                       (drive_summary.get("errors", []) if drive_summary else []))
-    
+    combined_errors = (
+        top_errors
+        + local_summary.get("errors", [])
+        + chroma_summary.get("errors", [])
+        + (drive_summary.get("errors", []) if drive_summary else [])
+    )
+
     return {
         "folder_id": settings.google_drive_folder_id or "local",
         "processed_files": local_summary.get("processed_files", 0) + (drive_summary.get("processed_files", 0) if drive_summary else 0),
         "ingested_files": local_summary.get("ingested_files", 0) + (drive_summary.get("ingested_files", 0) if drive_summary else 0),
-        "chunks_written": local_summary.get("chunks_written", 0) + (drive_summary.get("chunks_written", 0) if drive_summary else 0),
+        "chunks_written": chroma_summary.get("chunks_stored", 0) + local_summary.get("chunks_written", 0),
         "errors": combined_errors,
         "details": {
             "local": local_summary,
             "chromadb": chroma_summary,
-            "drive": drive_summary
-        }
+            "drive": drive_summary,
+        },
     }
 
 

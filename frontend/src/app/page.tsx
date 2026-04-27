@@ -175,10 +175,10 @@ function HomePage() {
     slot: CalendarSlot,
     messageId: string,
   ) => {
-    const requesterId = syncedUserId || session?.user?.email;
+    const requesterId = syncedUserId;
     if (!requesterId) {
       appendAssistantMessage(
-        "Please sign in first to create a booking request.",
+        "Your user profile hasn't synced yet. Please try again in a moment, or reload the page.",
       );
       return;
     }
@@ -217,6 +217,10 @@ function HomePage() {
         id?: string;
         status?: string;
       };
+
+      // Mark this message as actioned only AFTER successful creation
+      setActionedMessageIds((prev) => new Set(prev).add(messageId));
+
       const confirmationMessage = `Booking request created successfully${created.id ? ` (ID: ${created.id})` : ""}. Status: ${created.status ?? "pending"}.`;
       appendAssistantMessage(confirmationMessage);
 
@@ -234,15 +238,15 @@ function HomePage() {
         );
       }
 
-      // Persist actioned state in backend message metadata
-      if (activeChatId) {
+      // Persist actioned state + booking_request_id in backend message metadata
+      if (activeChatId && created.id) {
         await fetch(
           `${backendUrl}/chat/sessions/${activeChatId}/messages/${messageId}`,
           {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              metadata: { is_actioned: true },
+              metadata: { is_actioned: true, booking_request_id: created.id },
             }),
           },
         ).catch((err) =>
@@ -441,11 +445,11 @@ function HomePage() {
       try {
         const response = await fetch(`${backendUrl}/booking-requests`);
         if (!response.ok) return;
-        const data = (await response.json()) as BackendBookingRequest[];
+        const data = (await response.json()) as (BackendBookingRequest & { requester_email?: string })[];
         setBookingRequests(
           data.map((request) => ({
             id: request.id,
-            email: request.requester_user_id,
+            email: request.requester_email ?? request.requester_user_id,
             location: request.location,
             date: request.date,
             time: request.time_slot,
@@ -653,9 +657,12 @@ function HomePage() {
         );
 
         if (!response.ok) {
-          throw new Error("Failed to save decision");
+          const errText = await response.text().catch(() => "");
+          throw new Error(errText || `Failed to save decision (${response.status})`);
         }
-      } catch {
+      } catch (err: any) {
+        const msg = err?.message || "Failed to save decision";
+        alert(`Decision failed: ${msg}`);
         setBookingRequests((previous) =>
           previous.map((request) =>
             request.id === requestId
@@ -1032,9 +1039,6 @@ function HomePage() {
                         <div className="flex flex-wrap gap-2">
                           <button
                             onClick={() => {
-                              setActionedMessageIds((prev) =>
-                                new Set(prev).add(message.id),
-                              );
                               createBookingFromSlot(
                                 message.calendarFlow!
                                   .requested_slot as CalendarSlot,

@@ -218,7 +218,27 @@ class SupabaseService:
         if status:
             query = query.eq("status", status.value)
         response = query.execute()
-        return response.data or []
+        bookings = response.data or []
+
+        # Batch-resolve requester emails
+        user_ids = list({b["requester_user_id"] for b in bookings if b.get("requester_user_id")})
+        email_map: dict[str, str] = {}
+        if user_ids:
+            users_resp = (
+                self.client.table("app_users")
+                .select("id,email")
+                .in_("id", user_ids)
+                .execute()
+            )
+            for u in (users_resp.data or []):
+                email_map[u["id"]] = u["email"]
+
+        for booking in bookings:
+            booking["requester_email"] = email_map.get(
+                booking.get("requester_user_id", ""), booking.get("requester_user_id", "")
+            )
+
+        return bookings
 
     def decide_booking_request(
         self,
