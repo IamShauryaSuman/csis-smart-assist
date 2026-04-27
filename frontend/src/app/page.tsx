@@ -781,9 +781,88 @@ function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-bg-base text-text-primary lg:h-screen lg:overflow-hidden">
-      <header className="border-b border-border bg-bg-surface px-4 py-3 md:px-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="relative min-h-screen bg-bg-base text-text-primary lg:h-screen lg:overflow-hidden">
+      {/* Animated Polyhedron Sphere Background */}
+      <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center opacity-10">
+        <svg
+          className="w-[1200px] max-w-[200vw] animate-spin"
+          viewBox="0 0 200 200"
+          xmlns="http://www.w3.org/2000/svg"
+          style={{ animationDuration: "120s" }}
+        >
+          <g stroke="currentColor" strokeWidth="0.5" fill="none" className="text-text-secondary opacity-70">
+            {/* Outer boundary */}
+            <circle cx="100" cy="100" r="90" />
+            
+            {/* Geodesic/Polyhedron style intersecting geometric lines */}
+            <polygon points="10,100 40,40 100,10 160,40 190,100 160,160 100,190 40,160" />
+            <polygon points="28,56 64,28 136,28 172,56 172,144 136,172 64,172 28,144" />
+            <polygon points="46,100 64,64 100,46 136,64 154,100 136,136 100,154 64,136" />
+            
+            {/* Cross sections */}
+            <line x1="100" y1="10" x2="100" y2="190" />
+            <line x1="10" y1="100" x2="190" y2="100" />
+            <line x1="36" y1="36" x2="164" y2="164" />
+            <line x1="36" y1="164" x2="164" y2="36" />
+            
+            {/* Vertical and horizontal chords */}
+            <line x1="64" y1="28" x2="64" y2="172" />
+            <line x1="136" y1="28" x2="136" y2="172" />
+            <line x1="28" y1="56" x2="172" y2="56" />
+            <line x1="28" y1="144" x2="172" y2="144" />
+
+            {/* Triangle meshes to create 3D illusion */}
+            <path d="M100 10 L64 64 L100 100 L136 64 Z" />
+            <path d="M100 190 L64 136 L100 100 L136 136 Z" />
+            <path d="M10 100 L64 64 L100 100 L64 136 Z" />
+            <path d="M190 100 L136 64 L100 100 L136 136 Z" />
+            
+            {/* Vertices/Points */}
+            <g fill="currentColor" stroke="none">
+              <circle cx="100" cy="10" r="1.5" />
+              <circle cx="100" cy="190" r="1.5" />
+              <circle cx="10" cy="100" r="1.5" />
+              <circle cx="190" cy="100" r="1.5" />
+              
+              <circle cx="36" cy="36" r="1.5" />
+              <circle cx="164" cy="164" r="1.5" />
+              <circle cx="36" cy="164" r="1.5" />
+              <circle cx="164" cy="36" r="1.5" />
+              
+              <circle cx="40" cy="40" r="1.5" />
+              <circle cx="160" cy="40" r="1.5" />
+              <circle cx="160" cy="160" r="1.5" />
+              <circle cx="40" cy="160" r="1.5" />
+              
+              <circle cx="28" cy="56" r="1.5" />
+              <circle cx="172" cy="56" r="1.5" />
+              <circle cx="172" cy="144" r="1.5" />
+              <circle cx="28" cy="144" r="1.5" />
+              
+              <circle cx="64" cy="28" r="1.5" />
+              <circle cx="136" cy="28" r="1.5" />
+              <circle cx="136" cy="172" r="1.5" />
+              <circle cx="64" cy="172" r="1.5" />
+              
+              <circle cx="46" cy="100" r="1.5" />
+              <circle cx="154" cy="100" r="1.5" />
+              <circle cx="100" cy="46" r="1.5" />
+              <circle cx="100" cy="154" r="1.5" />
+              
+              <circle cx="64" cy="64" r="1.5" />
+              <circle cx="136" cy="64" r="1.5" />
+              <circle cx="136" cy="136" r="1.5" />
+              <circle cx="64" cy="136" r="1.5" />
+              
+              <circle cx="100" cy="100" r="2" />
+            </g>
+          </g>
+        </svg>
+      </div>
+
+      <div className="relative z-10 flex h-full flex-col">
+        <header className="flex-shrink-0 border-b border-border bg-bg-surface/50 backdrop-blur-md px-4 py-3 md:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="font-display text-lg font-semibold md:text-xl">
             CSIS SmartAssist
           </h1>
@@ -802,8 +881,8 @@ function HomePage() {
       </header>
 
       {isAdmin ? (
-        <main className="min-h-[calc(100vh-57px)] px-4 py-4 md:px-6 md:py-6">
-          <div className="mb-4 border border-border bg-bg-surface px-4 py-3">
+        <main className="min-h-[calc(100vh-57px)] px-4 py-4 md:px-6 md:py-6 relative z-10 w-full overflow-y-auto">
+          <div className="mb-4 border border-border bg-bg-surface/60 backdrop-blur-md px-4 py-3 shadow-lg">
             <h2 className="font-display text-lg font-semibold md:text-xl">
               Booking Requests Dashboard
             </h2>
@@ -879,7 +958,7 @@ function HomePage() {
             {bookingRequests.map((request) => (
               <article
                 key={request.id}
-                className="border border-border bg-bg-surface p-4"
+                className="border border-border bg-bg-surface/60 backdrop-blur-md p-4 shadow-lg"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
                   <p className="font-mono text-sm text-text-secondary">
@@ -965,12 +1044,12 @@ function HomePage() {
           </div>
         </main>
       ) : (
-        <main className="grid min-h-[calc(100vh-57px)] grid-cols-1 lg:h-[calc(100vh-57px)] lg:min-h-0 lg:grid-cols-12">
+        <main className="grid min-h-[calc(100vh-57px)] grid-cols-1 lg:h-[calc(100vh-57px)] lg:min-h-0 lg:grid-cols-12 relative z-10 w-full overflow-hidden">
           <aside
             id="history-sidebar"
-            className={`${isHistoryOpen ? "flex" : "hidden"} min-h-0 flex-col overflow-hidden border-b border-border lg:col-span-3 lg:flex lg:border-b-0 lg:border-r`}
+            className={`${isHistoryOpen ? "flex" : "hidden"} min-h-0 flex-col overflow-hidden border-b border-border lg:col-span-3 lg:flex lg:border-b-0 lg:border-r bg-bg-base/40 backdrop-blur-xl`}
           >
-            <div className="flex items-center justify-between border-b border-border bg-bg-surface px-4 py-2 font-mono text-sm text-text-secondary">
+            <div className="flex items-center justify-between border-b border-border bg-bg-surface/50 backdrop-blur-md px-4 py-2 font-mono text-sm text-text-secondary">
               <span>History</span>
               <button
                 onClick={createNewChat}
@@ -995,8 +1074,8 @@ function HomePage() {
                     }}
                     className={`flex w-full items-start justify-between gap-3 border px-3 py-2 text-left transition ${
                       isActive
-                        ? "border-accent bg-bg-surface"
-                        : "border-border hover:bg-bg-surface"
+                        ? "border-accent bg-bg-surface/60 backdrop-blur-sm"
+                        : "border-border hover:bg-bg-surface/40 hover:backdrop-blur-sm"
                     }`}
                   >
                     <span className="min-w-0 flex-1 truncate text-sm text-text-primary">
@@ -1011,8 +1090,8 @@ function HomePage() {
             </div>
           </aside>
 
-          <section className="flex min-h-[55vh] flex-col border-b border-border lg:col-span-9 lg:min-h-0 lg:overflow-hidden lg:border-b-0 lg:border-r">
-            <div className="flex items-center justify-between border-b border-border bg-bg-surface px-4 py-2 font-mono text-sm text-text-secondary md:px-6">
+          <section className="flex min-h-[55vh] flex-col border-b border-border lg:col-span-9 lg:min-h-0 lg:overflow-hidden lg:border-b-0 lg:border-r bg-bg-base/20 backdrop-blur-md">
+            <div className="flex items-center justify-between border-b border-border bg-bg-surface/50 backdrop-blur-md px-4 py-2 font-mono text-sm text-text-secondary md:px-6">
               <span>Chat</span>
               <div className="flex items-center gap-2 lg:hidden">
                 <button
@@ -1035,7 +1114,7 @@ function HomePage() {
                     {message.role === "user" ? "You" : "Assistant"}
                   </p>
                   {message.role === "assistant" ? (
-                    <div className="mt-1 text-sm leading-relaxed md:text-base [&_a]:text-link [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:bg-bg-surface [&_blockquote]:px-3 [&_blockquote]:py-2 [&_code]:rounded [&_code]:bg-bg-surface [&_code]:px-1 [&_code]:py-0.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_h1]:mt-2 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:mt-2 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:mt-2 [&_h3]:text-sm [&_h3]:font-semibold [&_p]:whitespace-pre-wrap [&_p]:mb-2 [&_p:last-child]:mb-0">
+                    <div className="mt-1 text-sm leading-relaxed md:text-base [&_a]:text-link [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:bg-bg-surface/50 [&_blockquote]:backdrop-blur-sm [&_blockquote]:px-3 [&_blockquote]:py-2 [&_code]:rounded [&_code]:bg-bg-surface/50 [&_code]:px-1 [&_code]:py-0.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_h1]:mt-2 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:mt-2 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:mt-2 [&_h3]:text-sm [&_h3]:font-semibold [&_p]:whitespace-pre-wrap [&_p]:mb-2 [&_p:last-child]:mb-0">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {message.content}
                       </ReactMarkdown>
@@ -1047,7 +1126,7 @@ function HomePage() {
                   )}
 
                   {message.citations && message.citations.length > 0 && (
-                    <div className="mt-3 space-y-2 border border-border bg-bg-surface p-3">
+                    <div className="mt-3 space-y-2 border border-border bg-bg-surface/40 backdrop-blur-md p-3">
                       {message.citations.map((citation, index) => (
                         <div
                           key={`${message.id}-${index}`}
@@ -1145,7 +1224,7 @@ function HomePage() {
                     (message.calendarFlow?.status === "slot_unavailable" ||
                       message.calendarFlow?.status === "missing_datetime") &&
                     (message.calendarFlow?.nearby_slots?.length ?? 0) > 0 && (
-                      <div className="mt-3 space-y-2 border border-border bg-bg-surface p-3">
+                      <div className="mt-3 space-y-2 border border-border bg-bg-surface/40 backdrop-blur-md p-3">
                         <p className="font-mono text-xs text-text-secondary">
                           Select a nearby free slot to create a booking request:
                         </p>
@@ -1195,7 +1274,7 @@ function HomePage() {
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="sticky bottom-0 border-t border-border bg-bg-surface px-4 py-3 md:px-6">
+            <div className="sticky bottom-0 border-t border-border bg-bg-surface/50 backdrop-blur-md px-4 py-3 md:px-6">
               <form onSubmit={handleSendMessage} className="flex gap-2">
                 <input
                   type="text"
@@ -1203,7 +1282,7 @@ function HomePage() {
                   onChange={(event) => setInput(event.target.value)}
                   disabled={isLoading}
                   placeholder="Ask about policies, citations, or room booking..."
-                  className="h-11 flex-1 border border-border bg-bg-base px-3 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-link disabled:opacity-60"
+                  className="h-11 flex-1 border border-border bg-bg-base/60 backdrop-blur-sm px-3 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-link disabled:opacity-60"
                 />
                 <button
                   type="submit"
@@ -1217,6 +1296,7 @@ function HomePage() {
           </section>
         </main>
       )}
+      </div>
     </div>
   );
 }
