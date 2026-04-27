@@ -234,6 +234,10 @@ Set at least these keys in `backend/.env`:
 - `GOOGLE_CLIENT_SECRET`
 - `GOOGLE_TOKEN_PATH` (optional fallback to token JSON)
 - `GOOGLE_SENDER_EMAIL` (if using notifications)
+- `GEMINI_API_KEY` (if using Gemini AI)
+- `USE_GEMINI` (set to `true` to use Gemini instead of local Ollama)
+- `SMTP_SENDER_EMAIL`
+- `SMTP_SENDER_PASSWORD`
 
 Use the same `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in both `frontend/.env.local` and `backend/.env` so one Google Cloud app handles sign-in and all Google API calls.
 
@@ -301,6 +305,12 @@ Open `http://localhost:3000`.
 | `GOOGLE_TOKEN_PATH`          | Optional     | OAuth token JSON path fallback         |
 | `GOOGLE_SENDER_EMAIL`        | Optional     | Gmail API sender address               |
 | `ADMIN_SEED_EMAILS`          | Optional     | Comma-separated admin bootstrap emails |
+| `GEMINI_API_KEY`             | Optional     | Google Gemini API key                  |
+| `USE_GEMINI`                 | Optional     | Use Gemini instead of Ollama (JSON bool) |
+| `SMTP_HOST`                 | Optional     | SMTP server host                       |
+| `SMTP_PORT`                 | Optional     | SMTP server port                       |
+| `SMTP_SENDER_EMAIL`         | Optional     | SMTP sender address                    |
+| `SMTP_SENDER_PASSWORD`      | Optional     | SMTP sender password (app password)     |
 | `RAG_LOCAL_DATA_DIR`         | Optional     | Local docs folder                      |
 | `RAG_AUTO_INGEST_LOCAL_DATA` | Optional     | Auto-ingest at startup                 |
 | `RAG_AUTO_INGEST_DRIVE_DATA` | Optional     | Auto-ingest Google Drive at startup    |

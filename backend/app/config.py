@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     smtp_sender_email: str | None = None
     smtp_sender_password: str | None = None
     admin_receiver_email: str | None = None
+    google_calendar_id: str | None = None
+    google_sender_email: str | None = None
     rag_local_data_dir: str = "data"
     rag_auto_ingest_local_data: bool = True
 

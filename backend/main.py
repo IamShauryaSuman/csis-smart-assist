@@ -118,30 +118,43 @@ app.add_middleware(
 )
 
 
+def send_email(
+    email_receiver: str,
+    subject: str,
+    body: str,
+    html: str | None = None,
+) -> None:
+    smtp_sender_email = settings.smtp_sender_email or settings.google_sender_email
+    smtp_sender_password = settings.smtp_sender_password
+    
+    if not smtp_sender_email or not smtp_sender_password:
+        print(f"[Email] Skipping send to {email_receiver}: Missing SMTP credentials")
+        return
+
+    message = EmailMessage()
+    message["From"] = smtp_sender_email
+    message["To"] = email_receiver
+    message["Subject"] = subject
+    message.set_content(body)
+    
+    if html:
+        message.add_alternative(html, subtype="html")
+
+    try:
+        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port) as smtp_client:
+            smtp_client.login(smtp_sender_email, smtp_sender_password)
+            smtp_client.send_message(message)
+    except Exception as exc:
+        print(f"[Email] Failed to send email to {email_receiver}: {exc}")
+
+
 def _send_email_notification(
     recipients: list[str],
     subject: str,
     body: str,
 ) -> None:
-    smtp_sender_email = settings.smtp_sender_email
-    smtp_sender_password = settings.smtp_sender_password
-    if not smtp_sender_email or not smtp_sender_password:
-        return
-
-    normalized_recipients = sorted(
-        {item.strip() for item in recipients if item and item.strip()})
-    if not normalized_recipients:
-        return
-
-    message = EmailMessage()
-    message["From"] = smtp_sender_email
-    message["To"] = ", ".join(normalized_recipients)
-    message["Subject"] = subject
-    message.set_content(body)
-
-    with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port) as smtp_client:
-        smtp_client.login(smtp_sender_email, smtp_sender_password)
-        smtp_client.send_message(message)
+    for recipient in recipients:
+        send_email(email_receiver=recipient, subject=subject, body=body)
 
 
 def _parse_booking_slot_to_utc(date_value: str, time_slot: str) -> tuple[datetime, datetime]:
