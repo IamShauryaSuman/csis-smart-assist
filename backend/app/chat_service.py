@@ -90,9 +90,9 @@ class ChatService:
             import google.generativeai as genai
             genai.configure(api_key=self.settings.gemini_api_key)
             # Use the model name from settings or a default
-            model_name = self.settings.ollama_model.split(":")[0] if ":" in self.settings.ollama_model else "gemini-2.0-flash"
+            model_name = self.settings.ollama_model.split(":")[0] if ":" in self.settings.ollama_model else "gemini-2.5-flash"
             if "gemma" in model_name.lower():
-                model_name = "gemini-2.0-flash"
+                model_name = "gemini-2.5-flash"
             
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
