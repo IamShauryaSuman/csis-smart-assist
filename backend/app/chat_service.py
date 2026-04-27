@@ -44,7 +44,7 @@ class ChatService:
             import google.generativeai as genai
             genai.configure(api_key=self.settings.gemini_api_key)
             result = genai.embed_content(
-                model="models/gemini-embedding-2",
+                model="models/text-embedding-004",
                 content=text,
                 task_type="retrieval_query",
                 output_dimensionality=768,

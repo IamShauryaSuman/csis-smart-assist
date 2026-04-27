@@ -84,8 +84,8 @@ def build_google_service_account_credentials(
     settings: Settings,
     scopes: Sequence[str],
 ) -> service_account.Credentials | None:
-    info_payload = settings.google_calendar_service_account_json
-    path_payload = settings.google_calendar_service_account_path
+    info_payload = settings.google_service_account_json
+    path_payload = settings.google_service_account_path
 
     if not info_payload and not path_payload:
         return None
@@ -102,7 +102,7 @@ def build_google_service_account_credentials(
         except Exception as exc:
             raise HTTPException(
                 status_code=500,
-                detail=f"Invalid GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON: {exc}",
+                detail=f"Invalid GOOGLE_SERVICE_ACCOUNT_JSON: {exc}",
             ) from exc
     else:
         try:
@@ -118,8 +118,8 @@ def build_google_service_account_credentials(
             raise HTTPException(
                 status_code=500,
                 detail=(
-                    "Failed to initialize Google Calendar service account credentials "
-                    f"from GOOGLE_CALENDAR_SERVICE_ACCOUNT_PATH: {exc}"
+                    "Failed to initialize Google service account credentials "
+                    f"from GOOGLE_SERVICE_ACCOUNT_PATH: {exc}"
                 ),
             ) from exc
 

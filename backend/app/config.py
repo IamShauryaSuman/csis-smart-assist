@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     google_calendar_token_uri: str = "https://oauth2.googleapis.com/token"
     google_calendar_client_id: str | None = None
     google_calendar_client_secret: str | None = None
-    google_calendar_service_account_path: str | None = None
-    google_calendar_service_account_json: str | None = None
+    google_service_account_path: str | None = None
+    google_service_account_json: str | None = None
     google_calendar_subject: str | None = None
     
     # Generic Google OAuth (often used for Drive)
