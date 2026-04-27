@@ -8,12 +8,12 @@ class Settings(BaseSettings):
     supabase_secret_key: str | None = None
     supabase_service_role_key: str | None = None
     supabase_key: str | None = None
-    vector_dimensions: int = 1536
+    vector_dimensions: int = 768
     frontend_origin: str = "http://localhost:3000"
     frontend_origins: str | None = None
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "gemma2:2b"
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_model: str = "nomic-embed-text"
     use_gemini: bool = True
     gemini_api_key: str | None = None
     google_calendar_token_path: str | None = None
