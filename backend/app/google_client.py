@@ -88,6 +88,48 @@ def resolve_service_account_path(service_account_path: str | None) -> Path:
     )
 
 
+import re as _re
+
+
+def _fix_pem_key(raw_key: str) -> str:
+    """Rebuild a PEM private key to handle any level of escape mangling.
+
+    Environment variable providers (Render, Heroku, etc.) sometimes store the
+    private_key with literal ``\\n`` text, double-escaped ``\\\\n``, or other
+    artefacts.  Rather than guessing the escaping, this function:
+      1. Strips the PEM header/footer
+      2. Removes *everything* that isn't valid base64 (A-Z, a-z, 0-9, +, /, =)
+      3. Re-wraps at 64 characters with real newlines
+      4. Re-adds proper PEM envelope
+    """
+    key = raw_key
+    # Collapse every common escape variant into a newline first
+    key = key.replace("\\r\\n", "\n")
+    key = key.replace("\\r", "")
+    key = key.replace("\\n", "\n")
+    key = key.replace("\r", "")
+
+    # Detect PEM type (PRIVATE KEY, RSA PRIVATE KEY, etc.)
+    header_match = _re.search(r"-----BEGIN ([A-Z ]+)-----", key)
+    pem_type = header_match.group(1) if header_match else "PRIVATE KEY"
+
+    # Strip headers, footers, and whitespace to get raw base64
+    key = _re.sub(r"-----BEGIN [A-Z ]+-----", "", key)
+    key = _re.sub(r"-----END [A-Z ]+-----", "", key)
+    # Remove anything that's not valid base64
+    key = _re.sub(r"[^A-Za-z0-9+/=]", "", key)
+
+    # Re-wrap at 64 characters
+    lines = [key[i:i + 64] for i in range(0, len(key), 64)]
+    rebuilt = (
+        f"-----BEGIN {pem_type}-----\n"
+        + "\n".join(lines)
+        + f"\n-----END {pem_type}-----\n"
+    )
+    print(f"[SA-JSON] PEM rebuilt, {len(key)} base64 chars, {len(lines)} lines")
+    return rebuilt
+
+
 def build_google_service_account_credentials(
     settings: Settings,
     scopes: Sequence[str],
@@ -121,19 +163,9 @@ def build_google_service_account_credentials(
 
             if "private_key" in service_account_info:
                 pk = service_account_info["private_key"]
-                # Log first 60 chars to diagnose escaping (safe — it's just the PEM header)
-                import logging
-                _log = logging.getLogger("google_client")
-                _log.info(
-                    "[SA-JSON] private_key preview (first 80 chars): %r",
-                    pk[:80],
-                )
-                # Fix: replace literal two-char backslash-n sequences with real newlines.
-                # After json.loads on properly formatted JSON, \n is already a newline,
-                # but double-escaped or env-var-mangled keys may still have literal \n text.
-                pk = pk.replace("\\n", "\n")
-                pk = pk.replace("\\r", "")
-                pk = pk.replace("\r", "")
+                # Diagnostic: print to stdout so it always shows in Render logs
+                print(f"[SA-JSON] private_key first 80 chars (repr): {pk[:80]!r}")
+                pk = _fix_pem_key(pk)
                 service_account_info["private_key"] = pk
 
             credentials = service_account.Credentials.from_service_account_info(
