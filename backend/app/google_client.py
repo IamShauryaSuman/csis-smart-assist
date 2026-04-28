@@ -107,14 +107,28 @@ def build_google_service_account_credentials(
     if info_payload:
         try:
             service_account_info = json.loads(info_payload)
-            # Fix: Literal "\n" strings in private_key (common in env vars) must be actual newlines
+            # Fix: env-var private keys often contain literal "\n" text instead
+            # of real newlines.  Handle every common variant:
+            #   "\\n"  → already-escaped by JSON parse (the string contains \n chars)
+            #   r"\n" → literal backslash-n in the Python string
             if "private_key" in service_account_info:
-                service_account_info["private_key"] = service_account_info["private_key"].replace("\\n", "\n")
-                
+                pk = service_account_info["private_key"]
+                # Replace literal two-char sequences of backslash + 'n' with real newlines
+                pk = pk.replace("\\n", "\n")
+                # Collapse any leftover carriage-returns
+                pk = pk.replace("\r", "")
+                service_account_info["private_key"] = pk
+
             credentials = service_account.Credentials.from_service_account_info(
                 service_account_info,
                 scopes=list(scopes),
             )
+
+            if settings.google_calendar_subject:
+                credentials = credentials.with_subject(
+                    settings.google_calendar_subject)
+
+            return credentials
         except Exception as exc:
             json_error = exc
 
