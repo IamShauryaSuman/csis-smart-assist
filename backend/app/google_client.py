@@ -106,16 +106,33 @@ def build_google_service_account_credentials(
 
     if info_payload:
         try:
-            service_account_info = json.loads(info_payload)
-            # Fix: env-var private keys often contain literal "\n" text instead
-            # of real newlines.  Handle every common variant:
-            #   "\\n"  → already-escaped by JSON parse (the string contains \n chars)
-            #   r"\n" → literal backslash-n in the Python string
+            # Render sometimes wraps env var values in extra quotes,
+            # producing a double-stringified JSON.  Detect & unwrap.
+            raw = info_payload.strip()
+            if raw.startswith('"') or raw.startswith("'"):
+                try:
+                    unwrapped = json.loads(raw)
+                    if isinstance(unwrapped, str):
+                        raw = unwrapped
+                except Exception:
+                    pass
+
+            service_account_info = json.loads(raw)
+
             if "private_key" in service_account_info:
                 pk = service_account_info["private_key"]
-                # Replace literal two-char sequences of backslash + 'n' with real newlines
+                # Log first 60 chars to diagnose escaping (safe — it's just the PEM header)
+                import logging
+                _log = logging.getLogger("google_client")
+                _log.info(
+                    "[SA-JSON] private_key preview (first 80 chars): %r",
+                    pk[:80],
+                )
+                # Fix: replace literal two-char backslash-n sequences with real newlines.
+                # After json.loads on properly formatted JSON, \n is already a newline,
+                # but double-escaped or env-var-mangled keys may still have literal \n text.
                 pk = pk.replace("\\n", "\n")
-                # Collapse any leftover carriage-returns
+                pk = pk.replace("\\r", "")
                 pk = pk.replace("\r", "")
                 service_account_info["private_key"] = pk
 
@@ -130,6 +147,11 @@ def build_google_service_account_credentials(
 
             return credentials
         except Exception as exc:
+            import logging
+            logging.getLogger("google_client").error(
+                "[SA-JSON] Failed to parse service account JSON: %s", exc,
+                exc_info=True,
+            )
             json_error = exc
 
     try:
