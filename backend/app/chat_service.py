@@ -151,27 +151,19 @@ class ChatService:
         sources: list[dict] = []
 
         try:
-            import os
-            os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
-            import chromadb
-            client = chromadb.PersistentClient(path="./RAG_db")
-            collection = client.get_or_create_collection(name="RAG_db")
-
-            if collection.count() > 0:
-                query_embedding = self._embed_query(query)
-                results = collection.query(
-                    query_embeddings=[query_embedding],
-                    n_results=5,
-                )
-                if results and "documents" in results and results["documents"]:
-                    rag_chunks = results["documents"][0]
-                    # Build source info from ChromaDB results
-                    for i, doc in enumerate(rag_chunks):
-                        sources.append({
-                                "document_id": results["ids"][0][i] if results.get("ids") else None,
-                                "chunk_index": i,
-                                "similarity": round(1 - (results["distances"][0][i] if results.get("distances") else 0), 4),
-                            })
+            from .rag_store import search_rag_collection
+            query_embedding = self._embed_query(query)
+            matches = search_rag_collection(query_embedding=query_embedding)
+            if matches:
+                rag_chunks = [m["content"] for m in matches if m.get("content")]
+                sources = [
+                    {
+                        "document_id": m.get("id"),
+                        "chunk_index": m.get("chunk_index", i),
+                        "similarity": m.get("similarity"),
+                    }
+                    for i, m in enumerate(matches)
+                ]
         except Exception as exc:
             print(f"[ChromaDB] retrieval error: {exc}")
             rag_chunks = []
