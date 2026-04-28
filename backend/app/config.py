@@ -11,10 +11,6 @@ class Settings(BaseSettings):
     vector_dimensions: int = 768
     frontend_origin: str = "http://localhost:3000"
     frontend_origins: str | None = None
-    ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "gemma2:2b"
-    embedding_model: str = "nomic-embed-text"
-    use_gemini: bool = True
     gemini_api_key: str | None = None
     google_calendar_id: str | None = None
     google_calendar_token_path: str | None = None
@@ -34,7 +30,7 @@ class Settings(BaseSettings):
     google_client_secret: str | None = None
     google_token_uri: str = "https://oauth2.googleapis.com/token"
     google_token_path: str | None = None
-    
+
     google_drive_folder_id: str | None = None
     admin_seed_emails: str = ""
     smtp_host: str = "smtp.gmail.com"
@@ -43,8 +39,6 @@ class Settings(BaseSettings):
     smtp_sender_email: str | None = None
     smtp_sender_password: str | None = None
     admin_receiver_email: str | None = None
-    google_calendar_id: str | None = None
-    google_sender_email: str | None = None
     rag_local_data_dir: str = "data"
     rag_auto_ingest_local_data: bool = True
 

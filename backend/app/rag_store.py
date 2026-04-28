@@ -22,21 +22,40 @@ def resolve_rag_db_path(db_path: str | Path | None = None) -> str:
 
 
 _chroma_client = None
+_chroma_client_db_path: str | None = None
 
 
 def get_rag_collection(
     db_path: str | Path | None = None,
     collection_name: str = RAG_COLLECTION_NAME,
 ):
-    global _chroma_client
+    global _chroma_client, _chroma_client_db_path
     if chromadb is None:
         raise RuntimeError("chromadb is not installed")
 
     os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
-    
+
+    rag_db_path = Path(resolve_rag_db_path(db_path))
+
+    # Reset the cached client if the DB directory has been deleted or the path changed.
+    # This prevents the "no such table: collections" SQLite error that occurs when the
+    # folder is wiped on disk while the server keeps a stale PersistentClient handle.
+    if _chroma_client is not None:
+        db_path_changed = _chroma_client_db_path != str(rag_db_path)
+        db_dir_missing = not rag_db_path.exists()
+        if db_path_changed or db_dir_missing:
+            print(
+                f"[RAG] ChromaDB path changed or directory deleted "
+                f"(exists={rag_db_path.exists()}), resetting client."
+            )
+            _chroma_client = None
+            _chroma_client_db_path = None
+
     if _chroma_client is None:
-        _chroma_client = chromadb.PersistentClient(path=resolve_rag_db_path(db_path))
-    
+        rag_db_path.mkdir(parents=True, exist_ok=True)
+        _chroma_client = chromadb.PersistentClient(path=str(rag_db_path))
+        _chroma_client_db_path = str(rag_db_path)
+
     return _chroma_client.get_or_create_collection(name=collection_name)
 
 

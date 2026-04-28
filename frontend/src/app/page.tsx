@@ -794,8 +794,8 @@ function HomePage() {
             {lastIngestSummary && (
               <div className="mt-3 rounded border border-border bg-bg-base p-3 text-sm">
                 <p>Folder: {lastIngestSummary.folder_id ?? "(server)"}</p>
-                <p>Processed: {lastIngestSummary.processed_files}</p>
-                <p>Ingested: {lastIngestSummary.ingested_files}</p>
+                <p>Processed: {lastIngestSummary.processed}</p>
+                <p>Ingested: {lastIngestSummary.ingested}</p>
                 <p>Chunks written: {lastIngestSummary.chunks_written}</p>
                 {lastIngestSummary.errors &&
                   lastIngestSummary.errors.length > 0 && (
@@ -1047,7 +1047,8 @@ function HomePage() {
                             }}
                             disabled={
                               isBookingActionLoading ||
-                              actionedMessageIds.has(message.id)
+                              actionedMessageIds.has(message.id) ||
+                              !(bookingPurposes[message.id] || "").trim()
                             }
                             className="border border-success px-3 py-2 font-mono text-xs text-success transition hover:bg-success/10 disabled:cursor-not-allowed disabled:opacity-60"
                           >
@@ -1086,6 +1087,28 @@ function HomePage() {
                         <p className="font-mono text-xs text-text-secondary">
                           Select a nearby free slot to create a booking request:
                         </p>
+                        <div>
+                          <label
+                            htmlFor={`purpose-nearby-${message.id}`}
+                            className="mb-1 block font-mono text-xs text-text-secondary"
+                          >
+                            Purpose (required)
+                          </label>
+                          <input
+                            id={`purpose-nearby-${message.id}`}
+                            type="text"
+                            value={bookingPurposes[message.id] || ""}
+                            onChange={(e) =>
+                              setBookingPurposes((prev) => ({
+                                ...prev,
+                                [message.id]: e.target.value,
+                              }))
+                            }
+                            disabled={actionedMessageIds.has(message.id)}
+                            placeholder="e.g. Extra Tutorial, Lab session, Meeting..."
+                            className="w-full border border-border bg-bg-base px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-link disabled:opacity-60"
+                          />
+                        </div>
                         <div className="flex flex-wrap gap-2">
                           {message.calendarFlow?.nearby_slots?.map(
                             (slot, index) => {
@@ -1097,7 +1120,11 @@ function HomePage() {
                                   onClick={() =>
                                     createBookingFromSlot(slot, message.id)
                                   }
-                                  disabled={isBookingActionLoading}
+                                  disabled={
+                                    isBookingActionLoading ||
+                                    actionedMessageIds.has(message.id) ||
+                                    !(bookingPurposes[message.id] || "").trim()
+                                  }
                                   className="border border-accent px-3 py-2 font-mono text-xs text-accent transition hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   {start.toLocaleDateString([], {

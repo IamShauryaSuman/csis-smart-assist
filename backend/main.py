@@ -40,66 +40,8 @@ from app.services import SupabaseService
 from app.supabase_client import get_supabase_client
 
 
-def _run_rag_ingest() -> None:
-    """Run RAG ingestion in a background thread so the server can start immediately.
-
-    Heavy dependencies (for example, chromadb and parser libraries)
-    are imported lazily here so uvicorn can bind
-    to $PORT before any of them load.
-    """
-    import os
-    os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
-
-    try:
-        from app.rag_local_ingest import (
-            sync_local_rag_data_folder,
-            sync_local_rag_to_chromadb,
-            sync_google_drive_rag_data
-        )
-    except Exception as exc:
-        print(f"[RAG] Failed to import rag_local_ingest: {exc}")
-        return
-
-    try:
-        service = get_supabase_service()
-        summary = sync_local_rag_data_folder(
-            service=service,
-            data_dir=settings.rag_local_data_dir,
-            vector_dimensions=settings.vector_dimensions,
-        )
-        print("[RAG] Supabase sync summary:", summary)
-    except Exception as exc:
-        print(f"[RAG] Supabase sync failed: {exc}")
-
-    try:
-        chroma_summary = sync_local_rag_to_chromadb(
-            data_dir=settings.rag_local_data_dir,
-            embedding_model=settings.embedding_model,
-        )
-        print("[RAG] ChromaDB sync summary:", chroma_summary)
-    except Exception as exc:
-        print(f"[RAG] ChromaDB sync failed: {exc}")
-
-
-def _schedule_rag_ingest() -> None:
-    """Start RAG ingestion in a background thread (called from event loop timer)."""
-    try:
-        thread = threading.Thread(target=_run_rag_ingest, daemon=True)
-        thread.start()
-        print("[RAG] Background ingestion thread started")
-    except Exception as exc:
-        print(f"[RAG] Failed to start ingestion thread: {exc}")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    # Delay RAG ingestion so uvicorn binds the port first.
-    # call_later runs _schedule_rag_ingest 5s after the event-loop starts.
-    if settings.rag_auto_ingest_local_data:
-        loop = asyncio.get_event_loop()
-        loop.call_later(5, _schedule_rag_ingest)
-        print("[RAG] Ingestion scheduled (5s after port bind)")
-
     yield
 
 
@@ -520,17 +462,7 @@ def search_rag_chunks(
     return service.search_rag_chunks(payload)
 
 
-@app.post("/rag/ingest-local")
-def ingest_local_rag_data(
-    service: SupabaseService = Depends(get_supabase_service),
-) -> dict:
-    from app.rag_local_ingest import sync_local_rag_data_folder
 
-    return sync_local_rag_data_folder(
-        service=service,
-        data_dir=settings.rag_local_data_dir,
-        vector_dimensions=settings.vector_dimensions,
-    )
 
 
 @app.post("/chat", response_model=ChatResponseOut)
@@ -689,51 +621,20 @@ def calendar_nearby_slots(
 
 
 @app.post("/rag/ingest-drive")
-def ingest_drive_data(
-    service: SupabaseService = Depends(get_supabase_service),
-) -> dict:
-    """Trigger a manual sync of RAG data from both local folder and Google Drive."""
-    from app.rag_local_ingest import (
-        sync_local_rag_data_folder,
-        sync_local_rag_to_chromadb,
-        sync_google_drive_rag_data
-    )
-    
-    # 1. Local Sync
-    local_summary = sync_local_rag_data_folder(
-        service=service,
-        data_dir=settings.rag_local_data_dir,
-        vector_dimensions=settings.vector_dimensions,
-    )
-    chroma_summary = sync_local_rag_to_chromadb(
-        data_dir=settings.rag_local_data_dir,
-        embedding_model=settings.embedding_model,
-    )
-    
-    # 2. Drive Sync (if configured)
-    drive_summary = None
-    if settings.google_drive_folder_id:
-        drive_summary = sync_google_drive_rag_data(
-            service=service,
-            folder_id=settings.google_drive_folder_id,
-            vector_dimensions=settings.vector_dimensions,
-            embedding_model=settings.embedding_model,
-        )
-    
-    # Merge summaries for frontend
-    combined_errors = (local_summary.get("errors", []) + 
-                       chroma_summary.get("errors", []) + 
-                       (drive_summary.get("errors", []) if drive_summary else []))
-    
-    return {
-        "folder_id": settings.google_drive_folder_id or "local",
-        "processed_files": local_summary.get("processed_files", 0) + (drive_summary.get("processed_files", 0) if drive_summary else 0),
-        "ingested_files": local_summary.get("ingested_files", 0) + (drive_summary.get("ingested_files", 0) if drive_summary else 0),
-        "chunks_written": local_summary.get("chunks_written", 0) + (drive_summary.get("chunks_written", 0) if drive_summary else 0),
-        "errors": combined_errors,
-        "details": {
-            "local": local_summary,
-            "chromadb": chroma_summary,
-            "drive": drive_summary
+def ingest_drive_data() -> dict:
+    """Trigger a full re-sync of RAG data from Google Drive into ChromaDB."""
+    from app.rag_local_ingest import sync_google_drive_rag_data
+
+    if not settings.google_drive_folder_id:
+        return {
+            "folder_id": None,
+            "processed": 0,
+            "ingested": 0,
+            "chunks_written": 0,
+            "errors": ["GOOGLE_DRIVE_FOLDER_ID is not configured"],
         }
-    }
+
+    return sync_google_drive_rag_data(
+        folder_id=settings.google_drive_folder_id,
+        gemini_key=settings.gemini_api_key,
+    )

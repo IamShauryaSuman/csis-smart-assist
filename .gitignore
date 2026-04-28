@@ -34,7 +34,5 @@ frontend/out/
 frontend/.vercel/
 
 # Vector DB and Temporary Scripts
-RAG_db/
-backend/RAG_db/
 backend/setup_supabase.py
 backend/get_new_token.py

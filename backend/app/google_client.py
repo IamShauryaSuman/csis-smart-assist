@@ -55,16 +55,24 @@ def resolve_token_path(token_path: str) -> Path:
     )
 
 
-def resolve_service_account_path(service_account_path: str) -> Path:
-    configured = Path(service_account_path)
-    candidates: list[Path] = []
+def resolve_service_account_path(service_account_path: str | None) -> Path:
+    configured = Path(service_account_path) if service_account_path else None
+    base_dir = Path(__file__).resolve().parents[1]
 
-    if configured.is_absolute():
-        candidates.append(configured)
-    else:
-        base_dir = Path(__file__).resolve().parents[1]
-        candidates.append((base_dir / configured).resolve())
-        candidates.append(configured.resolve())
+    candidates: list[Path] = []
+    if configured is not None:
+        if configured.is_absolute():
+            candidates.append(configured)
+        else:
+            candidates.append((base_dir / configured).resolve())
+            candidates.append(configured.resolve())
+
+    candidates.extend(
+        [
+            (base_dir / "keys" / "service-account.json").resolve(),
+            (base_dir / "service-account.json").resolve(),
+        ],
+    )
 
     seen: set[str] = set()
     for candidate in candidates:
@@ -88,9 +96,13 @@ def build_google_service_account_credentials(
     path_payload = settings.google_service_account_path
 
     if not info_payload and not path_payload:
-        return None
+        try:
+            path_payload = str(resolve_service_account_path(None))
+        except FileNotFoundError:
+            return None
 
     credentials: service_account.Credentials
+    json_error: Exception | None = None
 
     if info_payload:
         try:
@@ -104,28 +116,40 @@ def build_google_service_account_credentials(
                 scopes=list(scopes),
             )
         except Exception as exc:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Invalid GOOGLE_SERVICE_ACCOUNT_JSON: {exc}",
-            ) from exc
-    else:
-        try:
-            service_account_path = resolve_service_account_path(
-                path_payload or "")
-            credentials = service_account.Credentials.from_service_account_file(
-                str(service_account_path),
-                scopes=list(scopes),
-            )
-        except FileNotFoundError as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
-        except Exception as exc:
+            json_error = exc
+
+    try:
+        service_account_path = resolve_service_account_path(path_payload)
+        credentials = service_account.Credentials.from_service_account_file(
+            str(service_account_path),
+            scopes=list(scopes),
+        )
+    except FileNotFoundError as exc:
+        if json_error is not None:
             raise HTTPException(
                 status_code=500,
                 detail=(
-                    "Failed to initialize Google service account credentials "
-                    f"from GOOGLE_SERVICE_ACCOUNT_PATH: {exc}"
+                    f"Invalid GOOGLE_SERVICE_ACCOUNT_JSON: {json_error}. "
+                    f"Also failed to find a usable service account file: {exc}"
                 ),
             ) from exc
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        if json_error is not None:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    f"Invalid GOOGLE_SERVICE_ACCOUNT_JSON: {json_error}. "
+                    f"Failed to initialize Google service account credentials from file: {exc}"
+                ),
+            ) from exc
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Failed to initialize Google service account credentials "
+                f"from GOOGLE_SERVICE_ACCOUNT_PATH: {exc}"
+            ),
+        ) from exc
 
     if settings.google_calendar_subject:
         credentials = credentials.with_subject(

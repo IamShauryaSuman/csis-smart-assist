@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# CSIS Smart Assist - Local LLM Deployment Script
-# This script helps deploy the application with Ollama to Fly.io
+# CSIS Smart Assist - Gemini Deployment Script
+# This script helps deploy the application to Fly.io
 
 echo "🚀 CSIS Smart Assist - Local LLM Deployment"
 echo "=========================================="
@@ -21,17 +21,12 @@ fly auth login
 echo "📦 Deploying to Fly.io..."
 fly launch --name csis-smart-assist
 
-# Set environment variables
-echo "⚙️  Setting environment variables..."
-fly secrets set OLLAMA_BASE_URL="http://localhost:11434"
-fly secrets set OLLAMA_MODEL="gemma2:2b"
-fly secrets set EMBEDDING_MODEL="sentence-transformers/all-MiniLM-L6-v2"
-
-# You may need to set other secrets like SUPABASE_URL, etc.
+# You may need to set other secrets like SUPABASE_URL and GEMINI_API_KEY.
 echo "📝 Remember to set your other environment variables:"
 echo "   - SUPABASE_URL"
 echo "   - SUPABASE_SECRET_KEY"
 echo "   - FRONTEND_ORIGINS"
+echo "   - GEMINI_API_KEY"
 echo "   - And any other required variables"
 
 # Deploy

@@ -35,9 +35,7 @@ Create `.env` in `backend/` from `.env.example` and set:
 - `FRONTEND_ORIGIN` (legacy single-origin fallback, default `http://localhost:3000`)
 - `FRONTEND_ORIGINS` (preferred, comma-separated allowlist e.g. `http://localhost:3000,https://your-frontend.vercel.app`)
 - `ADMIN_SEED_EMAILS` (comma-separated)
-- `OLLAMA_BASE_URL` (default `http://localhost:11434`)
-- `OLLAMA_MODEL` (default `gemma2:2b`)
-- `EMBEDDING_MODEL` (default `sentence-transformers/all-MiniLM-L6-v2`)
+- `GEMINI_API_KEY` (required for chat and RAG embeddings)
 - `GOOGLE_CALENDAR_ID`
 - `GOOGLE_CALENDAR_TOKEN_PATH` (default `calender/token.json`)
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SENDER_EMAIL`, `SMTP_SENDER_PASSWORD` (for email notifications)
@@ -72,7 +70,7 @@ curl -X POST http://localhost:8000/rag/ingest-local
 
 ```bash
 source .venv/bin/activate
-uvicorn Chatbot.main:app --host 127.0.0.1 --port 8000
+uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
 API: `http://127.0.0.1:8000`  
@@ -89,9 +87,7 @@ This repo includes a root `render.yaml` that deploys `backend/` as a Python web 
    - `SUPABASE_SECRET_KEY` (or `SUPABASE_SERVICE_ROLE_KEY`)
    - `FRONTEND_ORIGINS` (include all frontend URLs that call the API, including Vercel preview/production and local dev)
    - `FRONTEND_ORIGIN` (optional legacy fallback)
-   - `OLLAMA_BASE_URL` (default: `http://localhost:11434`)
-   - `OLLAMA_MODEL` (default: `gemma2:2b`)
-   - `EMBEDDING_MODEL` (default: `sentence-transformers/all-MiniLM-L6-v2`)
+   - `GEMINI_API_KEY`
    - `GOOGLE_CALENDAR_ID` and `GOOGLE_CALENDAR_TOKEN_PATH` (if calendar endpoints are used)
    - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SENDER_EMAIL`, `SMTP_SENDER_PASSWORD` (if notifications are enabled)
 4. Optional recommended values in Render:

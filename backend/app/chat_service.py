@@ -1,11 +1,8 @@
 import json
 from collections import defaultdict
 from datetime import datetime, timedelta
-from functools import lru_cache
 from typing import Any
 from zoneinfo import ZoneInfo
-
-import requests
 import logging
 
 logger = logging.getLogger(__name__)
@@ -33,91 +30,60 @@ class ChatService:
         self.supabase_service = supabase_service
 
     def _embed_query(self, text: str) -> list[float]:
-        """Generate embeddings using either Gemini (cloud) or Ollama (local)."""
-        if self.settings.use_gemini and self.settings.gemini_api_key:
-            return self._embed_query_google(text)
-        return self._embed_query_ollama(text)
+        """Generate embeddings using Gemini."""
+        return self._embed_query_google(text)
 
     def _embed_query_google(self, text: str) -> list[float]:
         """Generate 768-dim embeddings using Gemini."""
+        if not self.settings.gemini_api_key:
+            logger.error("[Gemini Embed] Missing GEMINI_API_KEY")
+            return [0.0] * self.settings.vector_dimensions
+
         try:
             import google.generativeai as genai
             genai.configure(api_key=self.settings.gemini_api_key)
             result = genai.embed_content(
-                model="models/embedding-001",
+                model="models/gemini-embedding-001",
                 content=text,
                 task_type="retrieval_query",
                 output_dimensionality=768,
             )
-            return result["embedding"]
-        except Exception as exc:
-            print(f"[Gemini Embed] Failed: {exc}. Falling back to Ollama.")
-            return self._embed_query_ollama(text)
+            embedding = result.get("embedding")
+            if embedding:
+                if isinstance(embedding, list) and embedding and isinstance(embedding[0], list):
+                    return embedding[0]
+                return embedding
 
-    def _embed_query_ollama(self, text: str) -> list[float]:
-        """Generate embeddings using Ollama's embedding API."""
-        try:
-            response = requests.post(
-                f"{self.settings.ollama_base_url}/api/embed",
-                json={
-                    "model": self.settings.embedding_model,
-                    "input": text,
-                },
-                timeout=30,
-            )
-            response.raise_for_status()
-            data = response.json()
-            # Ollama returns {"embeddings": [[...]]} for /api/embed
-            embeddings = data.get("embeddings") or data.get("embedding")
-            if isinstance(embeddings, list) and len(embeddings) > 0:
-                if isinstance(embeddings[0], list):
-                    return embeddings[0]
-                return embeddings
-            raise ValueError(f"Unexpected Ollama embed response: {data}")
+            embeddings = result.get("embeddings")
+            if isinstance(embeddings, list) and embeddings:
+                first_embedding = embeddings[0]
+                if isinstance(first_embedding, list) and first_embedding and isinstance(first_embedding[0], list):
+                    return first_embedding[0]
+                return first_embedding
+
+            raise ValueError(f"Unexpected Gemini embedding response shape: {result}")
         except Exception as exc:
-            logger.error(f"[Ollama Embed] Error: {exc}")
-            return []
+            logger.error(f"[Gemini Embed] Failed: {exc}")
+            return [0.0] * self.settings.vector_dimensions
 
     def _call_llm(self, prompt: str) -> str:
-        """Call the LLM (Gemini if use_gemini is True, else Ollama)."""
-        if self.settings.use_gemini and self.settings.gemini_api_key:
-            return self._call_gemini(prompt)
-        return self._call_ollama(prompt)
+        """Call the Gemini API."""
+        return self._call_gemini(prompt)
 
     def _call_gemini(self, prompt: str) -> str:
         """Call the Google Gemini API."""
+        if not self.settings.gemini_api_key:
+            return "Error calling Gemini API: GEMINI_API_KEY is not configured."
+
         try:
             import google.generativeai as genai
             genai.configure(api_key=self.settings.gemini_api_key)
-            # Use the model name from settings or a default
-            model_name = self.settings.ollama_model.split(":")[0] if ":" in self.settings.ollama_model else "gemini-2.5-flash"
-            if "gemma" in model_name.lower():
-                model_name = "gemini-2.5-flash"
-            
-            model = genai.GenerativeModel(model_name)
+            model = genai.GenerativeModel("gemini-2.5-flash")
             response = model.generate_content(prompt)
             return response.text
         except Exception as exc:
             logger.error(f"[Gemini] Error: {exc}", exc_info=True)
             return f"Error calling Gemini API: {exc}. Please check your credentials."
-
-    def _call_ollama(self, prompt: str) -> str:
-        """Call the Ollama API."""
-        try:
-            response = requests.post(
-                f"{self.settings.ollama_base_url}/api/generate",
-                json={
-                    "model": self.settings.ollama_model,
-                    "prompt": prompt,
-                    "stream": False,
-                },
-                timeout=60,
-            )
-            response.raise_for_status()
-            return response.json().get("response", "")
-        except Exception as exc:
-            logger.error(f"[Ollama] Error: {exc}")
-            return "I'm having trouble connecting to my local AI core."
 
     # ── Memory helpers ─────────────────────────────────────────────────
     def _get_memory(self, user_id: str) -> dict[str, Any]:
