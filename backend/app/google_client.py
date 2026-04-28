@@ -95,6 +95,10 @@ def build_google_service_account_credentials(
     if info_payload:
         try:
             service_account_info = json.loads(info_payload)
+            # Fix: Literal "\n" strings in private_key (common in env vars) must be actual newlines
+            if "private_key" in service_account_info:
+                service_account_info["private_key"] = service_account_info["private_key"].replace("\\n", "\n")
+                
             credentials = service_account.Credentials.from_service_account_info(
                 service_account_info,
                 scopes=list(scopes),
