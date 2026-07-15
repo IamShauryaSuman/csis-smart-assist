@@ -1,0 +1,83 @@
+@use 'variables' as *;
+@use 'mixins' as *;
+
+.card {
+  @include surface(2);
+  padding: $space-4;
+  transition: all $transition-base;
+
+  &:hover {
+    border-color: $border-strong;
+  }
+}
+
+.top {
+  @include flex-between;
+  margin-bottom: $space-3;
+}
+
+.title {
+  font-family: $font-heading;
+  font-size: $text-base;
+  font-weight: $weight-semibold;
+  color: $text-primary;
+  @include truncate;
+  max-width: 70%;
+}
+
+.statusPending {
+  @include status-badge($warning, $warning-muted);
+}
+
+.statusApproved {
+  @include status-badge($success, $success-muted);
+}
+
+.statusRejected {
+  @include status-badge($error, $error-muted);
+}
+
+.details {
+  @include flex-column;
+  gap: $space-2;
+}
+
+.row {
+  @include flex-row;
+  gap: $space-2;
+}
+
+.icon {
+  font-size: $text-sm;
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.value {
+  font-size: $text-sm;
+  color: $text-secondary;
+}
+
+.notes {
+  margin-top: $space-3;
+  padding: $space-3;
+  background: $bg-elevated;
+  border-left: 3px solid $accent-primary;
+  border-radius: 0 $radius-sm $radius-sm 0;
+}
+
+.notesLabel {
+  font-family: $font-heading;
+  font-size: $text-xs;
+  font-weight: $weight-semibold;
+  color: $text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: $space-1;
+}
+
+.notesText {
+  font-size: $text-sm;
+  color: $text-secondary;
+}

@@ -1,0 +1,178 @@
+@use 'variables' as *;
+@use 'mixins' as *;
+
+.dashboard {
+  @include flex-column;
+  gap: $space-6;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: $space-3;
+}
+
+.statCard {
+  @include surface(2);
+  padding: $space-4;
+  @include flex-column;
+  gap: $space-1;
+}
+
+.statValue {
+  font-family: $font-heading;
+  font-size: $text-2xl;
+  font-weight: $weight-bold;
+  color: $text-primary;
+}
+
+.statLabel {
+  font-family: $font-heading;
+  font-size: $text-xs;
+  color: $text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+// ── Sync Controls ────────────────────────────────────────────────────────
+.syncSection {
+  @include surface(1);
+  padding: $space-6;
+}
+
+.syncHeader {
+  @include flex-between;
+  margin-bottom: $space-4;
+}
+
+.syncTitle {
+  font-family: $font-heading;
+  font-size: $text-md;
+  font-weight: $weight-semibold;
+  color: $text-primary;
+}
+
+.scanBtn {
+  @include button-primary;
+  font-size: $text-sm;
+  padding: $space-2 $space-4;
+}
+
+.deltaInfo {
+  @include flex-column;
+  gap: $space-3;
+}
+
+.deltaRow {
+  @include flex-between;
+  padding: $space-2 $space-3;
+  background: $bg-tertiary;
+  border-radius: $radius-md;
+}
+
+.deltaLabel {
+  @include flex-row;
+  gap: $space-2;
+}
+
+.deltaIcon {
+  width: 8px;
+  height: 8px;
+  border-radius: $radius-full;
+}
+
+.deltaNew { background: $success; }
+.deltaModified { background: $warning; }
+.deltaDeleted { background: $error; }
+
+.deltaText {
+  font-size: $text-sm;
+  color: $text-secondary;
+}
+
+.deltaCount {
+  font-family: $font-mono;
+  font-size: $text-sm;
+  color: $text-primary;
+}
+
+.syncAllBtn {
+  @include button-primary;
+  width: 100%;
+  margin-top: $space-4;
+  padding: $space-3;
+}
+
+// ── Progress ─────────────────────────────────────────────────────────────
+.progress {
+  @include flex-column;
+  gap: $space-2;
+  margin-top: $space-4;
+}
+
+.progressBar {
+  width: 100%;
+  height: 6px;
+  background: $bg-elevated;
+  border-radius: $radius-full;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: $accent-primary;
+  border-radius: $radius-full;
+  transition: width 0.3s ease;
+}
+
+.progressText {
+  font-size: $text-xs;
+  color: $text-tertiary;
+  text-align: center;
+}
+
+// ── File List ────────────────────────────────────────────────────────────
+.fileList {
+  @include flex-column;
+  gap: $space-2;
+}
+
+.fileItem {
+  @include flex-between;
+  padding: $space-3;
+  background: $bg-tertiary;
+  border-radius: $radius-md;
+  border: 1px solid $border-subtle;
+}
+
+.fileInfo {
+  @include flex-column;
+  gap: 2px;
+}
+
+.fileName {
+  font-size: $text-sm;
+  color: $text-primary;
+  font-weight: $weight-medium;
+}
+
+.fileMeta {
+  font-size: $text-xs;
+  color: $text-muted;
+}
+
+.chunkBadge {
+  font-family: $font-mono;
+  font-size: $text-xs;
+  padding: $space-1 $space-2;
+  background: $accent-muted;
+  color: $accent-hover;
+  border-radius: $radius-sm;
+}
+
+.emptyState {
+  text-align: center;
+  padding: $space-8;
+  color: $text-muted;
+  font-size: $text-sm;
+}

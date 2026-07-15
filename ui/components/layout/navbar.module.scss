@@ -1,0 +1,257 @@
+@use 'variables' as *;
+@use 'mixins' as *;
+
+.nav {
+  @include flex-between;
+  padding: $space-3 $space-4;
+  background-color: $bg-secondary;
+  border-bottom: 1px solid $border-default;
+  height: 56px;
+  position: sticky;
+  top: 0;
+  z-index: $z-overlay;
+
+  @include respond-to(lg) {
+    padding: $space-3 $space-6;
+  }
+}
+
+.left {
+  @include flex-row;
+  gap: $space-4;
+}
+
+.logo {
+  @include flex-row;
+  gap: $space-2;
+  text-decoration: none;
+}
+
+.logoMark {
+  padding: 0 $space-2;
+  min-width: 44px;
+  height: 28px;
+  background: $accent-primary;
+  border-radius: $radius-sm;
+  @include flex-center;
+  font-family: $font-heading;
+  font-weight: $weight-bold;
+  font-size: $text-xs;
+  color: $bg-primary;
+  letter-spacing: 0.05em;
+}
+
+.logoText {
+  font-family: $font-heading;
+  font-size: $text-base;
+  font-weight: $weight-semibold;
+  color: $text-primary;
+  letter-spacing: -0.01em;
+}
+
+.navLinks {
+  @include flex-row;
+  gap: $space-1;
+  display: none;
+
+  @include respond-to(md) {
+    display: flex;
+  }
+}
+
+.navLink {
+  @include button-ghost;
+  font-family: $font-heading;
+  font-size: $text-sm;
+  letter-spacing: 0.01em;
+  padding: $space-2 $space-3;
+  border-radius: $radius-md;
+  text-decoration: none;
+  color: $text-tertiary;
+
+  &:hover {
+    color: $text-primary;
+    background-color: $bg-surface;
+  }
+}
+
+.navLinkActive {
+  color: $text-primary;
+  background-color: $bg-tertiary;
+}
+
+.right {
+  @include flex-row;
+  gap: $space-3;
+}
+
+.adminLink {
+  margin-right: $space-2;
+  display: none;
+
+  @include respond-to(md) {
+    display: flex;
+  }
+}
+
+.dropdownContainer {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.userInfo {
+  @include button-reset;
+  @include flex-row;
+  gap: $space-2;
+  display: none;
+  padding: $space-1 $space-2;
+  border-radius: $radius-md;
+  transition: background-color $transition-fast;
+
+  @include respond-to(md) {
+    display: flex;
+  }
+
+  &:hover, &[aria-expanded="true"] {
+    background-color: $bg-surface;
+  }
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: $radius-full;
+  object-fit: cover;
+  border: 1px solid $border-default;
+}
+
+.avatarFallback {
+  width: 28px;
+  height: 28px;
+  border-radius: $radius-full;
+  @include flex-center;
+  background: $accent-muted;
+  color: $accent-hover;
+  font-family: $font-heading;
+  font-size: $text-xs;
+  font-weight: $weight-bold;
+}
+
+.userName {
+  font-size: $text-sm;
+  color: $text-secondary;
+  max-width: 140px;
+  @include truncate;
+}
+
+.dropdownMenu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: $space-2;
+  min-width: 180px;
+  background: $bg-secondary;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+  padding: $space-1;
+  box-shadow: $shadow-lg;
+  display: flex;
+  flex-direction: column;
+  z-index: $z-dropdown;
+  animation: slideDown 0.15s ease-out forwards;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dropdownItem {
+  @include button-reset;
+  @include flex-row;
+  gap: $space-3;
+  width: 100%;
+  padding: $space-2 $space-3;
+  border-radius: $radius-sm;
+  color: $text-secondary;
+  font-size: $text-sm;
+  transition: all $transition-fast;
+  text-decoration: none;
+
+  &:hover {
+    background-color: $bg-surface;
+    color: $text-primary;
+  }
+}
+
+.signOutItem {
+  color: $error;
+  margin-top: 4px;
+  border-top: 1px solid $border-default;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  padding-top: 12px;
+  
+  &:hover {
+    background-color: rgba(239, 68, 68, 0.1);
+    color: $error;
+  }
+}
+
+// Mobile menu toggle
+.mobileToggle {
+  @include button-ghost;
+  display: flex;
+
+  @include respond-to(md) {
+    display: none;
+  }
+}
+
+.mobileMenu {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: 56px;
+  left: 0;
+  right: 0;
+  background: $bg-secondary;
+  border-bottom: 1px solid $border-default;
+  padding: $space-2 $space-4;
+  z-index: $z-dropdown;
+
+  @include respond-to(md) {
+    display: none;
+  }
+}
+
+.mobileNavLink {
+  @include button-ghost;
+  font-family: $font-heading;
+  font-size: $text-base;
+  padding: $space-3;
+  width: 100%;
+  justify-content: flex-start;
+  text-decoration: none;
+  color: $text-secondary;
+
+  &:hover {
+    color: $text-primary;
+  }
+}
+
+.mobileDivider {
+  border: none;
+  border-top: 1px solid $border-default;
+  margin: $space-2 0;
+}
+
+.mobileSignOut {
+  color: $error;
+  
+  &:hover {
+    color: $error;
+    background: rgba(239, 68, 68, 0.1);
+  }
+}

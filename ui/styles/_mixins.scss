@@ -1,0 +1,185 @@
+// ── SCSS Mixins ──────────────────────────────────────────────────────────────
+// Reusable layout and utility mixins
+
+@use 'variables' as *;
+
+// ── Responsive Breakpoints ─────────────────────────────────────────────────
+@mixin respond-to($breakpoint) {
+  @if $breakpoint == sm  { @media (min-width: $bp-sm) { @content; } }
+  @if $breakpoint == md  { @media (min-width: $bp-md) { @content; } }
+  @if $breakpoint == lg  { @media (min-width: $bp-lg) { @content; } }
+  @if $breakpoint == xl  { @media (min-width: $bp-xl) { @content; } }
+  @if $breakpoint == 2xl { @media (min-width: $bp-2xl) { @content; } }
+}
+
+@mixin mobile-only {
+  @media (max-width: #{$bp-md - 1px}) { @content; }
+}
+
+// ── Flexbox Utilities ──────────────────────────────────────────────────────
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+@mixin flex-column {
+  display: flex;
+  flex-direction: column;
+}
+
+@mixin flex-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+// ── Surface Styles ─────────────────────────────────────────────────────────
+@mixin surface($level: 1) {
+  @if $level == 0 { background-color: $bg-primary; }
+  @if $level == 1 { background-color: $bg-secondary; }
+  @if $level == 2 { background-color: $bg-tertiary; }
+  @if $level == 3 { background-color: $bg-elevated; }
+  border: 1px solid $border-default;
+  border-radius: $radius-lg;
+}
+
+@mixin glass {
+  background: rgba(17, 17, 17, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+// ── Interactive Elements ───────────────────────────────────────────────────
+@mixin button-reset {
+  appearance: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  padding: 0;
+  margin: 0;
+}
+
+@mixin button-primary {
+  @include button-reset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: $space-2;
+  padding: $space-2 $space-4;
+  background-color: $accent-primary;
+  color: $bg-primary;
+  font-family: $font-heading;
+  font-size: $text-sm;
+  font-weight: $weight-semibold;
+  letter-spacing: 0.02em;
+  border-radius: $radius-md;
+  transition: all $transition-fast;
+
+  &:hover {
+    background-color: $accent-hover;
+    box-shadow: $shadow-glow;
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    &:hover {
+      box-shadow: none;
+    }
+  }
+}
+
+@mixin button-ghost {
+  @include button-reset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: $space-2;
+  padding: $space-2 $space-3;
+  color: $text-secondary;
+  font-family: $font-body;
+  font-size: $text-sm;
+  border-radius: $radius-md;
+  transition: all $transition-fast;
+
+  &:hover {
+    color: $text-primary;
+    background-color: $bg-surface;
+  }
+}
+
+@mixin input-field {
+  width: 100%;
+  padding: $space-2 $space-3;
+  background-color: $bg-tertiary;
+  color: $text-primary;
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+  font-family: $font-body;
+  font-size: $text-base;
+  transition: border-color $transition-fast;
+  outline: none;
+
+  &::placeholder {
+    color: $text-muted;
+  }
+
+  &:focus {
+    border-color: $accent-primary;
+    box-shadow: 0 0 0 2px $accent-muted;
+  }
+}
+
+// ── Layout Utilities ───────────────────────────────────────────────────────
+@mixin truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@mixin scrollbar-thin {
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: $border-strong;
+    border-radius: $radius-full;
+    &:hover {
+      background-color: $border-active;
+    }
+  }
+}
+
+// ── Status Badge ───────────────────────────────────────────────────────────
+@mixin status-badge($color, $bg-color) {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-1;
+  padding: $space-1 $space-2;
+  font-family: $font-heading;
+  font-size: $text-xs;
+  font-weight: $weight-semibold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: $color;
+  background-color: $bg-color;
+  border-radius: $radius-sm;
+}

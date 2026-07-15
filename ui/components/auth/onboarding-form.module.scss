@@ -1,0 +1,86 @@
+@use 'variables' as *;
+@use 'mixins' as *;
+
+.form {
+  @include flex-column;
+  gap: $space-6;
+  max-width: 520px;
+  width: 100%;
+}
+
+.field {
+  @include flex-column;
+  gap: $space-2;
+}
+
+.label {
+  font-family: $font-heading;
+  font-size: $text-xs;
+  font-weight: $weight-semibold;
+  color: $text-tertiary;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.input {
+  @include input-field;
+}
+
+.select {
+  @include input-field;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23737373' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: $space-8;
+
+  option {
+    background: $bg-tertiary;
+    color: $text-primary;
+  }
+}
+
+.interestsGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $space-2;
+}
+
+.interestChip {
+  @include button-reset;
+  padding: $space-1 $space-3;
+  border: 1px solid $border-default;
+  border-radius: $radius-full;
+  font-size: $text-sm;
+  color: $text-secondary;
+  transition: all $transition-fast;
+
+  &:hover {
+    border-color: $border-strong;
+    color: $text-primary;
+  }
+}
+
+.interestChipActive {
+  border-color: $accent-primary;
+  background: $accent-muted;
+  color: $accent-hover;
+}
+
+.submitBtn {
+  @include button-primary;
+  padding: $space-3 $space-6;
+  font-size: $text-base;
+  width: 100%;
+  border-radius: $radius-lg;
+  margin-top: $space-4;
+}
+
+.error {
+  font-size: $text-sm;
+  color: $error;
+  padding: $space-2;
+  background: $error-muted;
+  border-radius: $radius-md;
+}

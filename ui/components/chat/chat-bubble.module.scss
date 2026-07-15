@@ -1,0 +1,287 @@
+@use 'variables' as *;
+@use 'mixins' as *;
+@use 'typography' as *;
+
+.bubble {
+  display: flex;
+  gap: $space-3;
+  padding: $space-3 $space-4;
+  max-width: 100%;
+  animation: fadeIn 0.2s ease;
+
+  @include respond-to(md) {
+    padding: $space-3 $space-8;
+  }
+}
+
+.bubbleUser {
+  flex-direction: row-reverse;
+}
+
+.bubbleAssistant {
+  flex-direction: row;
+}
+
+.avatar {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: $radius-full;
+  @include flex-center;
+  font-family: $font-heading;
+  font-size: $text-xs;
+  font-weight: $weight-bold;
+}
+
+.avatarUser {
+  background: $accent-muted;
+  color: $accent-hover;
+}
+
+.avatarAssistant {
+  background: $bg-elevated;
+  border: 1px solid $border-default;
+  color: $text-secondary;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+}
+
+.contentUser {
+  text-align: right;
+}
+
+.messageBody {
+  display: inline-block;
+  max-width: 85%;
+  text-align: left;
+}
+
+.userBody {
+  background: $accent-muted;
+  border: 1px solid rgba($accent-primary, 0.2);
+  border-radius: $radius-lg $radius-lg 4px $radius-lg;
+  padding: $space-3 $space-4;
+}
+
+.assistantBody {
+  padding: $space-1 0;
+}
+
+// ── Markdown Rendering ───────────────────────────────────────────────────
+.markdown {
+  font-family: $font-body;
+  font-size: $text-base;
+  line-height: 1.7;
+  color: $text-secondary;
+  word-wrap: break-word;
+
+  p {
+    margin-bottom: $space-3;
+    &:last-child { margin-bottom: 0; }
+  }
+
+  strong {
+    color: $text-primary;
+    font-weight: $weight-semibold;
+  }
+
+  em {
+    font-style: italic;
+    color: $text-secondary;
+  }
+
+  ul, ol {
+    margin: $space-2 0;
+    padding-left: $space-5;
+  }
+
+  li {
+    margin-bottom: $space-1;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: $font-heading;
+    color: $text-primary;
+    margin: $space-4 0 $space-2;
+
+    &:first-child {
+      margin-top: 0;
+    }
+  }
+
+  h3 { font-size: $text-md; }
+  h4 { font-size: $text-base; }
+
+  code {
+    @include code-inline;
+  }
+
+  pre {
+    margin: 0;
+    padding: 0;
+    background: none;
+    border: none;
+    overflow: visible;
+  }
+
+  .codeBlockContainer {
+    margin: $space-3 0;
+    border: 1px solid $border-default;
+    border-radius: $radius-lg;
+    overflow: hidden;
+    background-color: $bg-tertiary;
+  }
+
+  .codeBlockHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: $space-2 $space-4;
+    background-color: $bg-elevated;
+    border-bottom: 1px solid $border-default;
+    font-family: $font-mono;
+    font-size: $text-xs;
+    color: $text-secondary;
+  }
+
+  .copyButton {
+    @include button-reset;
+    display: flex;
+    align-items: center;
+    gap: $space-1;
+    color: $text-secondary;
+    transition: color $transition-fast;
+
+    &:hover {
+      color: $text-primary;
+    }
+  }
+
+  .codeBlockContent {
+    padding: $space-4;
+    overflow-x: auto;
+    @include scrollbar-thin;
+
+    * {
+      @include scrollbar-thin;
+    }
+
+    & > div,
+    & > pre,
+    & > code,
+    code {
+      overflow-x: visible !important;
+      padding: 0;
+      background: transparent !important;
+      border: none;
+      border-radius: 0;
+      color: inherit;
+    }
+  }
+
+  blockquote {
+    border-left: 3px solid $border-strong;
+    padding-left: $space-4;
+    margin: $space-3 0;
+    color: $text-tertiary;
+    font-style: italic;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: $space-3 0;
+    font-size: $text-sm;
+
+    th, td {
+      padding: $space-2 $space-3;
+      border: 1px solid $border-default;
+      text-align: left;
+    }
+
+    th {
+      background: $bg-tertiary;
+      color: $text-primary;
+      font-family: $font-heading;
+      font-weight: $weight-semibold;
+      font-size: $text-xs;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    td {
+      color: $text-secondary;
+    }
+
+    tr:hover td {
+      background: $bg-elevated;
+    }
+  }
+
+  a {
+    color: $accent-primary;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+
+    &:hover {
+      color: $accent-hover;
+    }
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid $border-default;
+    margin: $space-4 0;
+  }
+}
+
+.timestamp {
+  @include label;
+  margin-top: $space-1;
+  font-size: 10px;
+  color: $text-muted;
+}
+
+.timestampUser {
+  text-align: right;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.typingDots {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  height: 20px;
+  padding: 0 4px;
+
+  span {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: $radius-full;
+    background: $text-muted;
+    animation: bounce 1.4s ease-in-out infinite both;
+
+    &:nth-child(1) { animation-delay: 0s; }
+    &:nth-child(2) { animation-delay: 0.2s; }
+    &:nth-child(3) { animation-delay: 0.4s; }
+  }
+}
+
+@keyframes bounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40% { transform: translateY(-6px); opacity: 1; }
+}

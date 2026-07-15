@@ -1,0 +1,26 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.loadingState {
+  @include flex-center;
+  height: 100dvh;
+  background: $bg-primary;
+  color: $text-tertiary;
+  font-family: $font-heading;
+  font-size: $text-sm;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.layoutWrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.mainContent {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}

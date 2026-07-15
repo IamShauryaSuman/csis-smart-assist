@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+ui/.next/
+ui/out/
+ui/build/
+ui/tsconfig.tsbuildinfo
+
+# Coverage
+.coverage
+htmlcov/
+coverage.xml
+
+# Misc
+.DS_Store
+*.sh
+*.log

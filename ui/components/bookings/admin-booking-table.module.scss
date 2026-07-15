@@ -1,0 +1,160 @@
+@use 'variables' as *;
+@use 'mixins' as *;
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: $text-sm;
+}
+
+.table th,
+.table td {
+  padding: $space-3;
+  text-align: left;
+  border-bottom: 1px solid $border-subtle;
+}
+
+.table th {
+  font-family: $font-heading;
+  font-size: $text-xs;
+  font-weight: $weight-semibold;
+  color: $text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: $bg-tertiary;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.table td {
+  color: $text-secondary;
+  vertical-align: middle;
+}
+
+.table tbody tr {
+  transition: background-color $transition-fast;
+
+  &:hover {
+    background: $bg-elevated;
+  }
+}
+
+.titleCell {
+  max-width: 200px;
+}
+
+.bookingTitle {
+  color: $text-primary;
+  font-weight: $weight-medium;
+  @include truncate;
+}
+
+.bookingDescription {
+  color: $text-secondary;
+  font-size: $text-xs;
+  margin-top: $space-1;
+  @include truncate;
+}
+
+.statusPending {
+  @include status-badge($warning, $warning-muted);
+}
+
+.statusApproved {
+  @include status-badge($success, $success-muted);
+}
+
+.statusRejected {
+  @include status-badge($error, $error-muted);
+}
+
+.actions {
+  @include flex-row;
+  gap: $space-2;
+}
+
+.approveBtn {
+  @include button-reset;
+  padding: $space-1 $space-2;
+  border-radius: $radius-sm;
+  font-size: $text-xs;
+  font-weight: $weight-semibold;
+  color: $success;
+  background: $success-muted;
+  transition: all $transition-fast;
+
+  &:hover {
+    filter: brightness(1.2);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+  }
+}
+
+.rejectBtn {
+  @include button-reset;
+  padding: $space-1 $space-2;
+  border-radius: $radius-sm;
+  font-size: $text-xs;
+  font-weight: $weight-semibold;
+  color: $error;
+  background: $error-muted;
+  transition: all $transition-fast;
+
+  &:hover {
+    filter: brightness(1.2);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+  }
+}
+
+.notesInput {
+  @include input-field;
+  font-size: $text-xs;
+  padding: $space-1 $space-2;
+  min-width: 140px;
+}
+
+.empty {
+  text-align: center;
+  padding: $space-8;
+  color: $text-muted;
+}
+
+.filterBar {
+  @include flex-row;
+  gap: $space-2;
+  margin-bottom: $space-4;
+  flex-wrap: wrap;
+}
+
+.filterBtn {
+  @include button-ghost;
+  font-family: $font-heading;
+  font-size: $text-xs;
+  letter-spacing: 0.04em;
+  padding: $space-1 $space-3;
+  border: 1px solid $border-default;
+  border-radius: $radius-full;
+}
+
+.filterBtnActive {
+  background: $accent-muted;
+  border-color: $accent-primary;
+  color: $accent-hover;
+}
+
+.lockedIndicator {
+  font-size: $text-xs;
+  color: $text-muted;
+  display: flex;
+  align-items: center;
+  background: $bg-elevated;
+  padding: $space-1 $space-2;
+  border-radius: $radius-sm;
+  border: 1px solid $border-subtle;
+}

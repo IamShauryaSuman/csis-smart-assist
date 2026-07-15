@@ -1,0 +1,142 @@
+@use 'variables' as *;
+@use 'mixins' as *;
+
+.proposal {
+  @include surface(2);
+  padding: $space-4;
+  margin: $space-2 0;
+  animation: fadeIn 0.3s ease;
+  max-width: 420px;
+}
+
+.header {
+  @include flex-between;
+  margin-bottom: $space-3;
+}
+
+.statusBadge {
+  @include status-badge($accent-hover, $accent-muted);
+  font-size: $text-xs;
+  font-weight: $weight-bold;
+  text-transform: uppercase;
+}
+
+.draft {
+  background: $accent-muted;
+  color: $accent-hover;
+}
+
+.pending {
+  background: rgba($warning, 0.1);
+  color: $warning;
+  border: 1px solid rgba($warning, 0.2);
+}
+
+.approved {
+  background: rgba($success, 0.1);
+  color: $success;
+  border: 1px solid rgba($success, 0.2);
+}
+
+.rejected {
+  background: rgba($error, 0.1);
+  color: $error;
+  border: 1px solid rgba($error, 0.2);
+}
+
+.expired {
+  background: $bg-elevated;
+  color: $text-muted;
+  border: 1px dashed $border-strong;
+}
+
+.infoBanner {
+  font-size: $text-xs;
+  color: $text-secondary;
+  background: $bg-surface;
+  padding: $space-2;
+  border-radius: $radius-sm;
+  border: 1px solid $border-subtle;
+  margin-bottom: $space-2;
+  font-style: italic;
+}
+
+.details {
+  @include flex-column;
+  gap: $space-2;
+  margin-bottom: $space-4;
+}
+
+.row {
+  @include flex-between;
+}
+
+.rowLabel {
+  font-family: $font-heading;
+  font-size: $text-xs;
+  font-weight: $weight-semibold;
+  color: $text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.rowValue {
+  font-size: $text-sm;
+  color: $text-primary;
+  text-align: right;
+  max-width: 60%;
+}
+
+.divider {
+  border: none;
+  border-top: 1px solid $border-subtle;
+  margin: $space-2 0;
+}
+
+.actions {
+  @include flex-row;
+  gap: $space-2;
+  justify-content: flex-end;
+}
+
+.confirmBtn {
+  @include button-primary;
+  font-size: $text-xs;
+  padding: $space-2 $space-4;
+}
+
+.dismissBtn {
+  @include button-ghost;
+  font-size: $text-xs;
+}
+
+.editForm {
+  @include flex-column;
+  gap: $space-2;
+}
+
+.input {
+  background: $bg-surface;
+  border: 1px solid $border-subtle;
+  color: $text-primary;
+  font-size: $text-sm;
+  padding: $space-1 $space-2;
+  border-radius: $radius-sm;
+  width: 60%;
+  
+  &:focus {
+    outline: none;
+    border-color: $accent-hover;
+  }
+}
+
+.error {
+  font-size: $text-sm;
+  color: $error;
+  padding: $space-2;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}

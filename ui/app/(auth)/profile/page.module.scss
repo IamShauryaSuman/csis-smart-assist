@@ -1,0 +1,157 @@
+@use 'variables' as *;
+@use 'mixins' as *;
+@use 'typography' as *;
+
+.page {
+  @include flex-column;
+  padding: $space-6;
+  overflow-y: auto;
+  @include scrollbar-thin;
+  flex: 1;
+  align-items: center;
+
+  @include respond-to(lg) {
+    padding: $space-8 $space-12;
+  }
+}
+
+.container {
+  max-width: 600px;
+  width: 100%;
+  @include flex-column;
+  gap: $space-8;
+}
+
+.header {
+  @include flex-column;
+  gap: $space-2;
+}
+
+.title {
+  @include heading-md;
+}
+
+.subtitle {
+  @include body-sm;
+  color: $text-tertiary;
+}
+
+.section {
+  @include surface(1);
+  padding: $space-6;
+}
+
+.sectionTitle {
+  font-family: $font-heading;
+  font-size: $text-base;
+  font-weight: $weight-semibold;
+  color: $text-primary;
+  margin-bottom: $space-4;
+  padding-bottom: $space-2;
+  border-bottom: 1px solid $border-subtle;
+}
+
+.field {
+  @include flex-column;
+  gap: $space-2;
+  margin-bottom: $space-4;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.label {
+  font-family: $font-heading;
+  font-size: $text-xs;
+  font-weight: $weight-semibold;
+  color: $text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.value {
+  font-size: $text-base;
+  color: $text-primary;
+}
+
+.input {
+  @include input-field;
+}
+
+.select {
+  @include input-field;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23737373' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: $space-8;
+
+  option {
+    background: $bg-tertiary;
+    color: $text-primary;
+  }
+}
+
+.interestsGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $space-2;
+}
+
+.interestChip {
+  @include button-reset;
+  padding: $space-1 $space-3;
+  border: 1px solid $border-default;
+  border-radius: $radius-full;
+  font-size: $text-sm;
+  color: $text-secondary;
+  transition: all $transition-fast;
+
+  &:hover {
+    border-color: $border-strong;
+    color: $text-primary;
+  }
+}
+
+.interestChipActive {
+  border-color: $accent-primary;
+  background: $accent-muted;
+  color: $accent-hover;
+}
+
+.saveBtn {
+  @include button-primary;
+  width: 100%;
+  padding: $space-3;
+  margin-top: $space-4;
+}
+
+.memorySection {
+  @include surface(2);
+  padding: $space-4;
+}
+
+.memoryContent {
+  font-family: $font-mono;
+  font-size: $text-sm;
+  color: $text-secondary;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.memoryEmpty {
+  font-size: $text-sm;
+  color: $text-muted;
+  font-style: italic;
+}
+
+.successMsg {
+  font-size: $text-sm;
+  color: $success;
+  padding: $space-2;
+  background: $success-muted;
+  border-radius: $radius-md;
+  text-align: center;
+}

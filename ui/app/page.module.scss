@@ -1,0 +1,282 @@
+@use 'variables' as *;
+@use 'mixins' as *;
+@use 'typography' as *;
+
+.landing {
+  min-height: 100dvh;
+  position: relative;
+  overflow: hidden;
+  @include flex-column;
+}
+
+.mouseGlow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(200px at var(--mouse-x, 50%) var(--mouse-y, 50%),
+      rgba(34, 197, 94, 0.05),
+      transparent 80%);
+
+  // Hide on devices that strictly have no hover capability (pure touch devices)
+  @media (any-hover: none) {
+    display: none;
+  }
+}
+
+// ── Canvas Background ────────────────────────────────────────────────────
+.canvasWrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: $z-base;
+}
+
+// ── Header ───────────────────────────────────────────────────────────────
+.header {
+  position: relative;
+  z-index: $z-sticky;
+  @include flex-between;
+  padding: $space-4 $space-6;
+
+  @include respond-to(lg) {
+    padding: $space-4 $space-10;
+  }
+}
+
+.logo {
+  @include flex-row;
+  align-items: center;
+}
+
+.statusBadge {
+  @include flex-row;
+  align-items: center;
+  gap: $space-2;
+  font-family: $font-mono;
+  font-size: $text-xs;
+  padding: 6px $space-3;
+  background: rgba(#111, 0.7);
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+  color: $text-secondary;
+  backdrop-filter: blur(8px);
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: $radius-full;
+  background: $warning;
+
+  &.online {
+    background: $success;
+    box-shadow: 0 0 8px rgba($success, 0.4);
+  }
+
+  &.offline {
+    background: $error;
+    box-shadow: 0 0 8px rgba($error, 0.4);
+  }
+}
+
+.headerLinks {
+  @include flex-row;
+  align-items: center;
+}
+
+.githubLink {
+  @include flex-row;
+  align-items: center;
+  gap: $space-2;
+  font-family: $font-mono;
+  font-size: $text-xs;
+  padding: 6px $space-3;
+  background: rgba(#111, 0.7);
+  border: 1px solid $border-default;
+  border-radius: $radius-md;
+  color: $text-secondary;
+  text-decoration: none;
+  backdrop-filter: blur(8px);
+  transition: all $transition-fast;
+
+  &:hover {
+    background: rgba(#1f1f1f, 0.8);
+    border-color: $border-active;
+    color: $text-primary;
+  }
+}
+
+// ── Hero Section ─────────────────────────────────────────────────────────
+.hero {
+  position: relative;
+  z-index: $z-sticky;
+  flex: 1;
+  @include flex-center;
+  @include flex-column;
+  padding: $space-8 $space-6;
+  text-align: center;
+}
+
+.heroContent {
+  width: 100%;
+  max-width: 480px;
+  @include flex-column;
+  align-items: center;
+
+  background: rgba(#0a0a0a, 0.4);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border-radius: $radius-md;
+  border: 1px solid $border-subtle;
+  padding: $space-12 $space-8;
+  box-shadow: $shadow-lg;
+}
+
+.titleWrapper {
+  text-align: center;
+  margin-bottom: $space-6;
+}
+
+.titlePrefix {
+  font-family: $font-heading;
+  font-weight: 300;
+  font-size: $text-4xl;
+  letter-spacing: 0.25em;
+  color: $text-tertiary;
+  margin-bottom: -4px;
+}
+
+.titleMain {
+  font-family: $font-heading;
+  font-weight: $weight-bold;
+  font-size: 40px;
+  color: $accent-primary;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+
+  @include respond-to(md) {
+    font-size: 56px;
+  }
+}
+
+.subtitleWrapper {
+  font-family: $font-mono;
+  font-size: $text-sm;
+  text-transform: uppercase;
+  color: $text-muted;
+  letter-spacing: 0.05em;
+  margin-bottom: $space-6;
+}
+
+.divider {
+  width: $space-12;
+  height: 1px;
+  background: $border-subtle;
+  margin-bottom: $space-6;
+}
+
+.description {
+  font-family: $font-body;
+  font-size: $text-base;
+  line-height: 1.6;
+  color: $text-tertiary;
+  text-align: center;
+  margin-bottom: $space-8;
+}
+
+// ── Auth Button ──────────────────────────────────────────────────────────
+.authButton {
+  @include button-reset;
+  @include flex-row;
+  align-items: center;
+  justify-content: center;
+  gap: $space-3;
+  width: 100%;
+  background: $bg-tertiary;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-primary;
+  font-family: $font-mono;
+  font-size: $text-sm;
+  font-weight: $weight-medium;
+  padding: $space-3;
+  position: relative;
+  transition: all $transition-fast;
+
+  &:hover {
+    background: $accent-primary;
+    border-color: $accent-primary;
+    color: $bg-primary;
+
+    .googleIconWrapper svg path {
+      fill: $bg-primary;
+    }
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+}
+
+.googleIconWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+
+// ── Footer ───────────────────────────────────────────────────────────────
+.footer {
+  position: relative;
+  z-index: $z-sticky;
+  text-align: center;
+  padding: $space-6;
+
+  p {
+    font-family: $font-mono;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: $text-muted;
+    letter-spacing: 0.05em;
+  }
+}
+
+// ── Error Banner ─────────────────────────────────────────────────────────
+.errorBanner {
+  position: fixed;
+  top: $space-4;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: $z-toast;
+  padding: $space-3 $space-6;
+  background: $error-muted;
+  border: 1px solid $error;
+  border-radius: $radius-lg;
+  color: $text-primary;
+  font-size: $text-sm;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}

@@ -1,0 +1,139 @@
+@use 'variables' as *;
+@use 'mixins' as *;
+@use 'typography' as *;
+
+// ── Google Fonts ─────────────────────────────────────────────────────────────
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+// ── CSS Reset & Base ─────────────────────────────────────────────────────────
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: $font-body;
+  font-size: $text-base;
+  line-height: 1.6;
+  color: $text-secondary;
+  background-color: $bg-primary;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+// ── Typography Defaults ──────────────────────────────────────────────────────
+h1, h2, h3, h4, h5, h6 {
+  font-family: $font-heading;
+  color: $text-primary;
+  line-height: 1.2;
+}
+
+h1 { font-size: $text-4xl; font-weight: $weight-bold; letter-spacing: -0.02em; }
+h2 { font-size: $text-3xl; font-weight: $weight-bold; letter-spacing: -0.01em; }
+h3 { font-size: $text-2xl; font-weight: $weight-semibold; }
+h4 { font-size: $text-xl;  font-weight: $weight-semibold; }
+h5 { font-size: $text-lg;  font-weight: $weight-medium; }
+h6 { font-size: $text-md;  font-weight: $weight-medium; }
+
+p {
+  color: $text-secondary;
+  line-height: 1.7;
+}
+
+a {
+  color: $accent-primary;
+  text-decoration: none;
+  transition: color $transition-fast;
+
+  &:hover {
+    color: $accent-hover;
+  }
+}
+
+code {
+  @include code-inline;
+}
+
+pre {
+  @include code-block;
+
+  code {
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 0;
+    font-size: inherit;
+    color: inherit;
+  }
+}
+
+// ── Focus Styles ─────────────────────────────────────────────────────────────
+:focus-visible {
+  outline: 2px solid $accent-primary;
+  outline-offset: 2px;
+}
+
+// ── Selection ────────────────────────────────────────────────────────────────
+::selection {
+  background-color: $accent-muted;
+  color: $text-primary;
+}
+
+// ── Scrollbar ────────────────────────────────────────────────────────────────
+body {
+  @include scrollbar-thin;
+}
+
+// ── Form Elements ────────────────────────────────────────────────────────────
+input,
+textarea,
+select {
+  font-family: $font-body;
+}
+
+button {
+  font-family: $font-body;
+  cursor: pointer;
+}
+
+// ── Images ───────────────────────────────────────────────────────────────────
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+// ── Utility Classes ──────────────────────────────────────────────────────────
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+@keyframes canvasFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+}

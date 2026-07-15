@@ -1,0 +1,49 @@
+@use 'variables' as *;
+@use 'mixins' as *;
+@use 'typography' as *;
+
+.page {
+  min-height: 100dvh;
+  background: $bg-primary;
+  @include flex-center;
+  padding: $space-6;
+}
+
+.container {
+  @include flex-column;
+  align-items: center;
+  gap: $space-8;
+  width: 100%;
+  max-width: 520px;
+}
+
+.header {
+  text-align: center;
+  @include flex-column;
+  align-items: center;
+  gap: $space-3;
+}
+
+.logoMark {
+  padding: 0 $space-4;
+  min-width: 80px;
+  height: 48px;
+  background: $accent-primary;
+  border-radius: $radius-md;
+  @include flex-center;
+  font-family: $font-heading;
+  font-weight: $weight-bold;
+  font-size: $text-xl;
+  color: $bg-primary;
+  letter-spacing: 0.05em;
+  margin-bottom: $space-2;
+}
+
+.title {
+  @include heading-lg;
+}
+
+.subtitle {
+  @include body-lg;
+  color: $text-tertiary;
+}

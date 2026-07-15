@@ -1,0 +1,232 @@
+@use 'variables' as *;
+@use 'mixins' as *;
+
+.sidebar {
+  width: 280px;
+  height: 100%;
+  background: $bg-secondary;
+  border-right: 1px solid $border-default;
+  @include flex-column;
+  @include scrollbar-thin;
+  flex-shrink: 0;
+
+  @include mobile-only {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    z-index: $z-modal;
+    transform: translateX(-100%);
+    transition: transform $transition-base;
+
+    &.open {
+      transform: translateX(0);
+    }
+  }
+}
+
+.header {
+  @include flex-between;
+  padding: $space-3 $space-4;
+  border-bottom: 1px solid $border-subtle;
+}
+
+.title {
+  font-family: $font-heading;
+  font-size: $text-sm;
+  font-weight: $weight-semibold;
+  color: $text-secondary;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.newChatBtn {
+  @include button-ghost;
+  padding: $space-1;
+  border-radius: $radius-sm;
+  color: $text-secondary;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    color: $text-primary;
+    background: $bg-tertiary;
+  }
+}
+
+.closeSidebarBtn {
+  @include button-ghost;
+  padding: $space-1;
+  border-radius: $radius-sm;
+  color: $text-secondary;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    color: $text-primary;
+    background: $bg-tertiary;
+  }
+}
+
+.desktopOnly {
+  display: none;
+  @include respond-to(md) {
+    display: inline-flex;
+  }
+}
+
+.mobileOnly {
+  display: inline-flex;
+  @include respond-to(md) {
+    display: none;
+  }
+}
+
+.list {
+  flex: 1;
+  overflow-y: auto;
+  @include scrollbar-thin;
+  padding: $space-2;
+}
+
+.sessionItem {
+  @include button-reset;
+  width: 100%;
+  padding: $space-2 $space-3;
+  border-radius: $radius-md;
+  @include flex-between;
+  gap: $space-2;
+  transition: background-color $transition-fast;
+  text-align: left;
+
+  &:hover {
+    background: $bg-tertiary;
+  }
+}
+
+.sessionItemActive {
+  background: $bg-tertiary;
+  border: 1px solid $border-default;
+}
+
+.sessionInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.sessionTitle {
+  font-family: $font-body;
+  font-size: $text-sm;
+  color: $text-primary;
+  @include truncate;
+}
+
+.sessionDate {
+  font-size: 10px;
+  color: $text-muted;
+  margin-top: 2px;
+}
+
+.sessionGroup {
+  margin-bottom: $space-4;
+}
+
+.groupLabel {
+  font-size: 11px;
+  font-weight: $weight-semibold;
+  color: $text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: $space-1 $space-3;
+  margin-bottom: $space-1;
+}
+
+.sessionActions {
+  display: flex;
+  gap: $space-1;
+  opacity: 0;
+  transition: opacity $transition-fast;
+  flex-shrink: 0;
+
+  .sessionItem:hover & {
+    opacity: 1;
+  }
+}
+
+.actionBtn {
+  @include button-reset;
+  padding: $space-1;
+  color: $text-muted;
+  border-radius: $radius-sm;
+  transition: all $transition-fast;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    color: $text-primary;
+    background: rgba(255, 255, 255, 0.1);
+  }
+}
+
+.deleteBtnHover {
+  &:hover {
+    color: $error;
+    background: $error-muted;
+  }
+}
+
+.editForm {
+  width: 100%;
+}
+
+.editInput {
+  width: 100%;
+  background: $bg-tertiary;
+  border: 1px solid $border-default;
+  border-radius: $radius-sm;
+  color: $text-primary;
+  font-family: $font-body;
+  font-size: $text-sm;
+  padding: 2px $space-1;
+  outline: none;
+
+  &:focus {
+    border-color: $accent-primary;
+  }
+}
+
+.empty {
+  @include flex-center;
+  @include flex-column;
+  height: 100%;
+  padding: $space-8;
+  text-align: center;
+  gap: $space-3;
+}
+
+.emptyIcon {
+  font-size: $text-3xl;
+  opacity: 0.3;
+}
+
+.emptyText {
+  font-size: $text-sm;
+  color: $text-muted;
+}
+
+.overlay {
+  display: none;
+
+  @include mobile-only {
+    display: block;
+    position: fixed;
+    inset: 0;
+    top: 56px;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: #{$z-overlay - 1};
+  }
+}
