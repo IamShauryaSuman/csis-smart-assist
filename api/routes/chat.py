@@ -29,7 +29,7 @@ from core.prompts import (
 )
 from core.rooms import get_rooms_manifest_text
 from services.calendar import format_availability_for_llm, query_freebusy
-from services.llm.hybrid import get_hybrid_client
+from services.llm.local import get_local_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -243,7 +243,7 @@ async def _finalize_chat_response(
 ):
     """Background task to store messages, update timestamp, and generate session title."""
     db = get_supabase_client()
-    llm = get_hybrid_client()
+    llm = get_local_client()
 
     try:
         # ── Store user message ──────────────────────────────────────────────────
@@ -337,7 +337,7 @@ async def send_message(
     """
     user_id = _extract_user_id(authorization)
     db = get_supabase_client()
-    llm = get_hybrid_client()
+    llm = get_local_client()
 
     # ── Parallel execution of initial I/O ───────────────────────────────────
     def _fetch_db_data():
@@ -494,9 +494,9 @@ async def send_message(
 
 @router.post("/sessions/{session_id}/synthesize")
 async def _synthesize_memory_task(session_id: str, user_id: str):
-    """Background task to synthesize memory using the hybrid LLM client."""
+    """Background task to synthesize memory using the local LLM client."""
     db = get_supabase_client()
-    llm = get_hybrid_client()
+    llm = get_local_client()
 
     try:
         # Load conversation

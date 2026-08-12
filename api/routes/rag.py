@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from core.config import get_settings
 from core.database import get_supabase_client
-from services.llm.hybrid import get_hybrid_client
+from services.llm.local import get_local_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/rag", tags=["rag"])
@@ -331,7 +331,7 @@ async def sync_single_file(
     _require_admin(user_id)
 
     db = get_supabase_client()
-    llm = get_hybrid_client()
+    llm = get_local_client()
 
     # Get file metadata from Drive
     drive_files = _list_drive_files()

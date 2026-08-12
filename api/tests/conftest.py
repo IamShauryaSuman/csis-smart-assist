@@ -52,12 +52,12 @@ def mock_supabase():
         yield client_mock
 
 @pytest.fixture
-def mock_gemini():
-    """Mocks the Gemini AI client."""
-    with patch("services.llm.gemini.get_gemini_client") as mock:
-        gemini_mock = AsyncMock()
-        mock.return_value = gemini_mock
-        yield gemini_mock
+def mock_ollama():
+    """Mocks the local Ollama LLM client."""
+    with patch("services.llm.local.get_local_client") as mock:
+        ollama_mock = AsyncMock()
+        mock.return_value = ollama_mock
+        yield ollama_mock
 
 @pytest.fixture
 def mock_calendar():

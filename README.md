@@ -9,7 +9,7 @@
     <img src="https://img.shields.io/badge/Next.js-black?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js" />
     <img src="https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi" alt="FastAPI" />
     <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase" />
-    <img src="https://img.shields.io/badge/Google%20Gemini-8E75B2?style=for-the-badge&logo=google%20gemini&logoColor=white" alt="Google Gemini" />
+    <img src="https://img.shields.io/badge/Ollama-000000?style=for-the-badge&logo=ollama&logoColor=white" alt="Ollama (Local LLM)" />
   </p>
 </div>
 
@@ -28,7 +28,7 @@ The platform relies on a heavily decoupled client-server architecture designed t
 ## 🏗 Architecture
 
 - **Frontend (`ui/`)**: A Next.js App Router application utilizing React Server Components, styled with atomic SCSS Modules for maximum speed and presentation control.
-- **Backend (`api/`)**: A robust FastAPI service responsible for executing Intent Routing (determining whether a query requires RAG, Calendar booking, or general LLM generation) and orchestrating third-party services.
+- **Backend (`api/`)**: A robust FastAPI service responsible for executing Intent Routing (determining whether a query requires RAG, Calendar booking, or general LLM generation) and orchestrating local model inference via Ollama.
 - **Database**: Supabase providing native Google OAuth, relational tables, `pgvector` for embedding storage, and Realtime WebSockets for live UI updates.
 
 For a deep dive into the engineering principles, vector management, and component architecture, please read the [Engineering Specification (`docs/SPEC.md`)](./docs/SPEC.md).
@@ -61,7 +61,44 @@ npm install
 npm run dev
 ```
 
-For comprehensive, step-by-step setup instructions, including how to configure Google Workspace Service Accounts and obtain Gemini API keys, please refer to the **[Setup Guide (`docs/SETUP.md`)](./docs/SETUP.md)**.
+For comprehensive, step-by-step setup instructions, including how to configure Google Workspace Service Accounts, please refer to the **[Setup Guide (`docs/SETUP.md`)](./docs/SETUP.md)**.
+
+---
+
+## 🧠 ALT-Local Branch — Local LLM Setup
+
+This branch (`ALT-Local`) replaces all cloud LLM providers (Gemini, Groq, OpenRouter) with **locally-hosted models via [Ollama](https://ollama.com)**. No API keys needed for inference — everything runs on your own GPU.
+
+### Prerequisites
+
+1. Install Ollama: https://ollama.com/download
+2. Pull the models for your hardware tier:
+
+| Tier | GPU Requirement | Commands | Notes |
+|------|----------------|----------|-------|
+| **Tier 1** (Recommended) | 80GB+ VRAM (A100 / 4× 24GB) | `ollama pull llama3:70b` `ollama pull bge-m3` | Best reasoning + heavy concurrency |
+| **Tier 2** (Mid-Range) | 2× 24GB / 1× 48GB | `ollama pull mistral-nemo` `ollama pull bge-m3` | Strong context window, slightly reduced reasoning |
+| **Tier 3** (Minimum) | 1× 24GB (RTX 3090/4090/A5000) | `ollama pull llama3:8b` `ollama pull bge-m3` | Basic queries, may bottleneck under load |
+
+### Configuration
+
+Set these in your `.env` (or leave defaults for Tier 1):
+```bash
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3:70b        # Change per tier
+OLLAMA_FAST_MODEL=llama3:8b     # Lightweight tasks (titles, intent)
+OLLAMA_EMBEDDING_MODEL=bge-m3   # Or nomic-embed-text for Tier 3
+EMBEDDING_DIMENSION=768          # Must match pgvector column
+```
+
+### Running
+```bash
+# Terminal 1: Start Ollama
+ollama serve
+
+# Terminal 2: Start the API
+cd api && uvicorn main:app --reload
+```
 
 ---
 

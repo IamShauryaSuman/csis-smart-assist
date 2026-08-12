@@ -29,9 +29,6 @@ class Settings(BaseSettings):
     next_public_supabase_url: str
     supabase_service_role_key: str
 
-    # ── Google Gemini ───────────────────────────────────────────────────────
-    gemini_api_key: str
-
     # ── Google Service Account (Base64-encoded JSON) ────────────────────────
     google_service_account_json_b64: str = ""
 
@@ -48,16 +45,13 @@ class Settings(BaseSettings):
     allowed_email_domain: str = "goa.bits-pilani.ac.in"
     frontend_url: str = "http://localhost:3000"
 
-    # ── Gemini Model Names ──────────────────────────────────────────────────
-    gemini_model: str = "gemini-flash-latest"
-    gemini_fast_model: str = "gemini-flash-lite-latest"
-    gemini_embedding_model: str = "gemini-embedding-001"
-
-    # ── Alternate LLM Providers ─────────────────────────────────────────────
-    groq_api_key: str = ""
-    groq_model: str = "llama-3.3-70b-versatile"
-    openrouter_api_key: str = ""
-    openrouter_model: str = "meta-llama/llama-3.3-70b-instruct:free"
+    # ── Local LLM (Ollama) ──────────────────────────────────────────────────
+    # See README for tiered model recommendations.
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3:70b"
+    ollama_fast_model: str = "llama3:8b"
+    ollama_embedding_model: str = "bge-m3"
+    embedding_dimension: int = 768
 
     @property
     def google_service_account_info(self) -> dict[str, Any]:
