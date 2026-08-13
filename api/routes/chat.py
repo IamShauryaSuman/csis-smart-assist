@@ -456,7 +456,8 @@ async def send_message(
                 full_content = ""
                 if intent == "department_query":
                     stream = _handle_department_query_stream(
-                        llm, body.message, conversation_context, memory_context
+                        llm, body.message, conversation_context, memory_context,
+                        search_keywords=intent_result.get("keywords")
                     )
                 else:
                     stream = _handle_general_query_stream(
@@ -579,6 +580,7 @@ async def _handle_department_query(
     user_message: str,
     conversation_context: str,
     memory_context: str,
+    search_keywords: list[str] = None,
 ) -> str:
     """Handle department-specific queries using RAG retrieval."""
     db = get_supabase_client()
@@ -593,15 +595,48 @@ async def _handle_department_query(
         {
             "query_embedding": query_embedding,
             "match_threshold": 0.2,
-            "match_count": 10,
+            "match_count": 30,
         },
     ).execute()
+    
+    # Hybrid fallback: exact keyword search for proper nouns / rare words
+    import re
+    if search_keywords:
+        keywords = [kw for kw in search_keywords if kw and len(kw) > 2]
+    else:
+        stop_words = {"what", "when", "where", "which", "who", "whom", "whose", "why", "how", "this", "that", "these", "those", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "will", "would", "shall", "should", "can", "could", "may", "might", "must", "about", "above", "across", "after", "against", "along", "among", "around", "at", "before", "behind", "below", "beneath", "beside", "between", "beyond", "but", "by", "concerning", "considering", "despite", "down", "during", "except", "for", "from", "in", "inside", "into", "like", "near", "of", "off", "on", "onto", "out", "outside", "over", "past", "regarding", "round", "since", "through", "throughout", "till", "to", "toward", "under", "underneath", "until", "up", "upon", "with", "within", "without", "number", "email", "office", "chamber", "room", "department", "csis", "bits", "pilani", "user", "assistant", "provided", "context", "documents", "according", "located", "information", "found", "source", "relevance", "based", "contact"}
+        keywords = [w for w in set(re.findall(r'\b[a-zA-Z]{4,}\b', search_query)) if w.lower() not in stop_words]
+    
+    hybrid_chunks = []
+    if keywords:
+        or_conds = ",".join(f"content.ilike.*{kw}*" for kw in keywords)
+        kw_resp = db.table("rag_chunks").select("id, content").or_(or_conds).limit(5).execute()
+        if kw_resp.data:
+            for kw_chunk in kw_resp.data:
+                kw_chunk["similarity"] = 0.99  # Keyword match score
+                kw_chunk["file_name"] = "Keyword Search Match"
+                # Isolate the exact matching line(s) to prevent LLM hallucination on noisy tables
+                matched_lines = [line.strip() for line in kw_chunk["content"].split("\n") 
+                               if any(kw.lower() in line.lower() for kw in keywords)]
+                if matched_lines:
+                    kw_chunk["content"] = "\n".join(matched_lines)
+                hybrid_chunks.append(kw_chunk)
+                
+    # Combine results
+    all_chunks = hybrid_chunks + (match_result.data or [])
+    # Deduplicate by content
+    seen_content = set()
+    unique_chunks = []
+    for c in all_chunks:
+        if c["content"] not in seen_content:
+            seen_content.add(c["content"])
+            unique_chunks.append(c)
 
     # Build RAG context
-    if match_result.data:
+    if unique_chunks:
         rag_context = "\n\n---\n\n".join(
             f"**Source: {chunk['file_name']}** (Relevance: {chunk['similarity']:.2f})\n{chunk['content']}"
-            for chunk in match_result.data
+            for chunk in unique_chunks[:20]
         )
     else:
         rag_context = "(No relevant documents found in the knowledge base.)"
@@ -620,6 +655,7 @@ async def _handle_department_query_stream(
     user_message: str,
     conversation_context: str,
     memory_context: str,
+    search_keywords: list[str] = None,
 ):
     """Handle department-specific queries using RAG retrieval and stream the response."""
     db = get_supabase_client()
@@ -631,14 +667,47 @@ async def _handle_department_query_stream(
         {
             "query_embedding": query_embedding,
             "match_threshold": 0.2,
-            "match_count": 10,
+            "match_count": 30,
         },
     ).execute()
+    
+    # Hybrid fallback: exact keyword search for proper nouns / rare words
+    import re
+    if search_keywords:
+        keywords = [kw for kw in search_keywords if kw and len(kw) > 2]
+    else:
+        stop_words = {"what", "when", "where", "which", "who", "whom", "whose", "why", "how", "this", "that", "these", "those", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "will", "would", "shall", "should", "can", "could", "may", "might", "must", "about", "above", "across", "after", "against", "along", "among", "around", "at", "before", "behind", "below", "beneath", "beside", "between", "beyond", "but", "by", "concerning", "considering", "despite", "down", "during", "except", "for", "from", "in", "inside", "into", "like", "near", "of", "off", "on", "onto", "out", "outside", "over", "past", "regarding", "round", "since", "through", "throughout", "till", "to", "toward", "under", "underneath", "until", "up", "upon", "with", "within", "without", "number", "email", "office", "chamber", "room", "department", "csis", "bits", "pilani", "user", "assistant", "provided", "context", "documents", "according", "located", "information", "found", "source", "relevance", "based", "contact"}
+        keywords = [w for w in set(re.findall(r'\b[a-zA-Z]{4,}\b', search_query)) if w.lower() not in stop_words]
+    
+    hybrid_chunks = []
+    if keywords:
+        or_conds = ",".join(f"content.ilike.*{kw}*" for kw in keywords)
+        kw_resp = db.table("rag_chunks").select("id, content").or_(or_conds).limit(5).execute()
+        if kw_resp.data:
+            for kw_chunk in kw_resp.data:
+                kw_chunk["similarity"] = 0.99  # Keyword match score
+                kw_chunk["file_name"] = "Keyword Search Match"
+                # Isolate the exact matching line(s) to prevent LLM hallucination on noisy tables
+                matched_lines = [line.strip() for line in kw_chunk["content"].split("\n") 
+                               if any(kw.lower() in line.lower() for kw in keywords)]
+                if matched_lines:
+                    kw_chunk["content"] = "\n".join(matched_lines)
+                hybrid_chunks.append(kw_chunk)
+                
+    # Combine results
+    all_chunks = hybrid_chunks + (match_result.data or [])
+    # Deduplicate by content
+    seen_content = set()
+    unique_chunks = []
+    for c in all_chunks:
+        if c["content"] not in seen_content:
+            seen_content.add(c["content"])
+            unique_chunks.append(c)
 
-    if match_result.data:
+    if unique_chunks:
         rag_context = "\n\n---\n\n".join(
             f"**Source: {chunk['file_name']}** (Relevance: {chunk['similarity']:.2f})\n{chunk['content']}"
-            for chunk in match_result.data
+            for chunk in unique_chunks[:20]
         )
     else:
         rag_context = "(No relevant documents found in the knowledge base.)"

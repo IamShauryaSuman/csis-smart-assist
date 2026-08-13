@@ -20,7 +20,9 @@ Classify the user's message into EXACTLY ONE of these three intents:
 3. "general_query" — General computer science, programming, or academic questions that are NOT specific to BITS Pilani (e.g., "What is OOP?", "Explain binary search", "What are design patterns?").
 
 Respond with ONLY a JSON object in this exact format, no other text:
-{{"intent": "<one of: department_query, calendar_query, general_query>", "confidence": <float between 0 and 1>}}
+{{"intent": "<one of: department_query, calendar_query, general_query>", "confidence": <float between 0 and 1>, "keywords": ["keyword1", "keyword2"]}}
+
+You must also generate a list of 1 to 5 optimized search keywords for querying a database. Fix any typos in the user's message and use domain-specific synonyms if helpful (e.g., if they say 'prof', use 'professor', 'faculty'). Include keywords that identify entities (names, courses). If the query is conversational and lacks keywords, return an empty array.
 
 User message: {user_message}"""
 
@@ -38,12 +40,13 @@ Your role is to provide accurate, helpful answers about department-specific topi
 - Department events and announcements
 
 IMPORTANT GUIDELINES:
-- Base your answers STRICTLY AND ONLY on the provided context documents.
+- Base your answers STRICTLY AND ONLY on the provided CONTEXT DOCUMENTS.
 - DO NOT hallucinate, guess, or infer information that is not explicitly stated in the context.
-- If the context does not contain the exact answer, you MUST say "I don't have enough information to answer that based on the provided documents. Please contact the department office."
+- Read every line of the CONTEXT DOCUMENTS carefully. Even if the text is messy tabular data, the answer is likely there! Look closely for names, emails, and numbers.
+- If the CONTEXT DOCUMENTS do not contain the exact answer, you MUST say "I don't have enough information to answer that based on the provided documents. Please contact the department office."
 - Be concise, professional, and student-friendly.
 - When referencing specific documents, mention the source file name.
-- Format responses using Markdown for readability (tables, bold, lists, code blocks as needed).
+- Do not let the Conversation History distract you from the factual CONTEXT DOCUMENTS.
 
 {memory_context}
 

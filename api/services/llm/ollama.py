@@ -152,6 +152,9 @@ class OllamaClient(BaseLLMClient):
 
     async def embed(self, text: str) -> list[float]:
         """Generate an embedding vector using the local embedding model."""
+        if "nomic-embed-text" in self._embedding_model.lower() and not text.startswith("search_document:"):
+            text = f"search_document: {text}"
+            
         payload = {
             "model": self._embedding_model,
             "input": text,
@@ -175,7 +178,9 @@ class OllamaClient(BaseLLMClient):
         raise ValueError("Failed to obtain embeddings from Ollama.")
 
     async def embed_query(self, text: str) -> list[float]:
-        """Generate a query embedding (same as embed for bge-m3)."""
+        """Generate a query embedding (with nomic-specific query prefix if needed)."""
+        if "nomic-embed-text" in self._embedding_model.lower() and not text.startswith("search_query:"):
+            text = f"search_query: {text}"
         return await self.embed(text)
 
     # ── JSON Generation ────────────────────────────────────────────────────
