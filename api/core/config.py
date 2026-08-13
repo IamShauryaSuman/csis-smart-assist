@@ -48,8 +48,8 @@ class Settings(BaseSettings):
     # ── Local LLM (Ollama) ──────────────────────────────────────────────────
     # See README for tiered model recommendations.
     ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "llama3:70b"
-    ollama_fast_model: str = "llama3:8b"
+    ollama_model: str = "llama3:8b"
+    ollama_fast_model: str = "llama3.2:1b"
     ollama_embedding_model: str = "bge-m3"
     embedding_dimension: int = 768
 

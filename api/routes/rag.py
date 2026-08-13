@@ -103,10 +103,16 @@ def _get_drive_service() -> Any:
             status_code=503, detail="Google Drive credentials not configured."
         )
 
-    credentials = service_account.Credentials.from_service_account_info(
-        info, scopes=["https://www.googleapis.com/auth/drive.readonly"]
-    )
-    return build("drive", "v3", credentials=credentials, cache_discovery=False)
+    try:
+        credentials = service_account.Credentials.from_service_account_info(
+            info, scopes=["https://www.googleapis.com/auth/drive.readonly"]
+        )
+        return build("drive", "v3", credentials=credentials, cache_discovery=False)
+    except Exception as e:
+        logger.error(f"Failed to initialize Google Drive service: {e}")
+        raise HTTPException(
+            status_code=503, detail="Invalid Google Drive credentials configuration."
+        )
 
 
 def _list_drive_files() -> list[dict[str, str]]:
