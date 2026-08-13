@@ -476,10 +476,12 @@ async def send_message(
             
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
             
+        except (asyncio.CancelledError, GeneratorExit):
+            logger.info("SSE stream cancelled by client connection drop.")
         except Exception as e:
             err_msg = str(e)
             if "429" in err_msg or "ResourceExhausted" in err_msg or "quota" in err_msg.lower():
-                clean_msg = "Google Gemini Free Tier limit reached (5 requests/minute). Please wait about 60 seconds and try again!"
+                clean_msg = "Rate limit reached. Please wait a moment and try again!"
                 logger.warning("LLM Quota Exceeded during stream.")
                 yield f"data: {json.dumps({'type': 'error', 'detail': clean_msg})}\n\n"
             else:
@@ -555,6 +557,18 @@ async def synthesize_session_memory(
 # ── Intent Handlers ─────────────────────────────────────────────────────────
 
 
+def _prepare_search_query(user_message: str, conversation_context: str) -> str:
+    """Combine recent context with query if short/pronoun-based for accurate vector search."""
+    if conversation_context and (
+        len(user_message.split()) < 6
+        or any(p in user_message.lower() for p in ["his", "her", "their", "he", "she", "this", "that", "it", "him"])
+    ):
+        lines = [line.strip() for line in conversation_context.strip().split("\n") if line.strip()]
+        last_turns = " ".join(lines[-2:]) if len(lines) >= 2 else conversation_context
+        return f"{last_turns} {user_message}"
+    return user_message
+
+
 async def _handle_department_query(
     llm: Any,
     user_message: str,
@@ -564,16 +578,17 @@ async def _handle_department_query(
     """Handle department-specific queries using RAG retrieval."""
     db = get_supabase_client()
 
-    # Generate query embedding
-    query_embedding = await llm.embed_query(user_message)
+    # Expand query with recent context for follow-up turns
+    search_query = _prepare_search_query(user_message, conversation_context)
+    query_embedding = await llm.embed_query(search_query)
 
     # Retrieve relevant chunks via pgvector similarity search
     match_result = db.rpc(
         "match_chunks",
         {
             "query_embedding": query_embedding,
-            "match_threshold": 0.4,
-            "match_count": 6,
+            "match_threshold": 0.2,
+            "match_count": 10,
         },
     ).execute()
 
@@ -604,13 +619,14 @@ async def _handle_department_query_stream(
     """Handle department-specific queries using RAG retrieval and stream the response."""
     db = get_supabase_client()
 
-    query_embedding = await llm.embed_query(user_message)
+    search_query = _prepare_search_query(user_message, conversation_context)
+    query_embedding = await llm.embed_query(search_query)
     match_result = db.rpc(
         "match_chunks",
         {
             "query_embedding": query_embedding,
-            "match_threshold": 0.4,
-            "match_count": 6,
+            "match_threshold": 0.2,
+            "match_count": 10,
         },
     ).execute()
 

@@ -140,6 +140,9 @@ class OllamaClient(BaseLLMClient):
                             if text:
                                 yield text
                         return  # Successfully finished streaming
+            except (asyncio.CancelledError, GeneratorExit):
+                logger.info("Ollama stream generation cancelled by client.")
+                return
             except (httpx.RemoteProtocolError, httpx.TransportError) as e:
                 logger.warning("Ollama stream attempt %d disconnected: %s. Retrying...", attempt + 1, e)
                 if attempt == 1:
@@ -148,27 +151,28 @@ class OllamaClient(BaseLLMClient):
     # ── Embeddings ─────────────────────────────────────────────────────────
 
     async def embed(self, text: str) -> list[float]:
-        """Generate an embedding vector using the local embedding model.
-
-        Truncates to ``self._embedding_dim`` dimensions to match the
-        existing pgvector column definition.
-        """
+        """Generate an embedding vector using the local embedding model."""
         payload = {
             "model": self._embedding_model,
             "input": text,
         }
 
-        async with httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT) as client:
-            resp = await client.post(self._embed_url(), json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-
-        # Ollama returns {"embeddings": [[...], ...]}
-        embeddings = data.get("embeddings", [])
-        if not embeddings:
-            raise ValueError("Ollama returned no embeddings.")
-        vector = embeddings[0]
-        return vector[: self._embedding_dim]
+        for attempt in range(2):
+            try:
+                async with self._create_client() as client:
+                    resp = await client.post(self._embed_url(), json=payload)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    embeddings = data.get("embeddings", [])
+                    if not embeddings:
+                        raise ValueError("Ollama returned no embeddings.")
+                    vector = embeddings[0]
+                    return vector[: self._embedding_dim]
+            except (httpx.RemoteProtocolError, httpx.TransportError) as e:
+                logger.warning("Ollama embed attempt %d failed: %s. Retrying...", attempt + 1, e)
+                if attempt == 1:
+                    raise e
+        raise ValueError("Failed to obtain embeddings from Ollama.")
 
     async def embed_query(self, text: str) -> list[float]:
         """Generate a query embedding (same as embed for bge-m3)."""
