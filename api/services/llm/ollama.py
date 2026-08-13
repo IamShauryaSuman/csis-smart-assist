@@ -23,8 +23,8 @@ from services.llm.base import BaseLLMClient
 
 logger = logging.getLogger(__name__)
 
-# Generous timeout: large local models can be slow on first load.
-_DEFAULT_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=10.0)
+# Generous timeout for local GPU model generation (300s read timeout)
+_DEFAULT_TIMEOUT = httpx.Timeout(connect=15.0, read=300.0, write=300.0, pool=30.0)
 
 
 class OllamaClient(BaseLLMClient):
@@ -49,6 +49,9 @@ class OllamaClient(BaseLLMClient):
     def _embed_url(self) -> str:
         return f"{self._base_url}/api/embed"
 
+    def _create_client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT, http2=False)
+
     @staticmethod
     def _build_messages(prompt: str, system_prompt: str) -> list[dict[str, str]]:
         msgs: list[dict[str, str]] = []
@@ -68,7 +71,7 @@ class OllamaClient(BaseLLMClient):
         max_tokens: int = 4096,
         fast_model: bool = False,
     ) -> str:
-        """Generate a text completion via Ollama (non-streaming)."""
+        """Generate a text completion via Ollama (non-streaming) with automatic retry on connection drops."""
         payload = {
             "model": self._pick_model(fast_model),
             "messages": self._build_messages(prompt, system_prompt),
@@ -79,16 +82,25 @@ class OllamaClient(BaseLLMClient):
             },
         }
 
-        async with httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT) as client:
-            resp = await client.post(self._chat_url(), json=payload)
-            resp.raise_for_status()
-            data = resp.json()
+        last_error = None
+        for attempt in range(2):
+            try:
+                async with self._create_client() as client:
+                    resp = await client.post(self._chat_url(), json=payload)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    content = data.get("message", {}).get("content", "")
+                    if not content:
+                        logger.warning("Ollama returned empty content for prompt: %s", prompt[:100])
+                        return "I'm sorry, I couldn't generate a response. Please try rephrasing your question."
+                    return content
+            except (httpx.RemoteProtocolError, httpx.TransportError, httpx.HTTPStatusError) as e:
+                last_error = e
+                logger.warning("Ollama generate attempt %d failed: %s. Retrying...", attempt + 1, e)
+                if attempt == 1:
+                    raise e
 
-        content = data.get("message", {}).get("content", "")
-        if not content:
-            logger.warning("Ollama returned empty content for prompt: %s", prompt[:100])
-            return "I'm sorry, I couldn't generate a response. Please try rephrasing your question."
-        return content
+        raise last_error or Exception("Ollama generate failed")
 
     # ── Streaming Generation ───────────────────────────────────────────────
 
@@ -101,7 +113,7 @@ class OllamaClient(BaseLLMClient):
         max_tokens: int = 4096,
         fast_model: bool = False,
     ):
-        """Generate a text completion as an async stream of chunks."""
+        """Generate a text completion as an async stream of chunks with automatic retry on connection drops."""
         payload = {
             "model": self._pick_model(fast_model),
             "messages": self._build_messages(prompt, system_prompt),
@@ -112,19 +124,26 @@ class OllamaClient(BaseLLMClient):
             },
         }
 
-        async with httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT) as client:
-            async with client.stream("POST", self._chat_url(), json=payload) as resp:
-                resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    if not line.strip():
-                        continue
-                    try:
-                        chunk = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    text = chunk.get("message", {}).get("content", "")
-                    if text:
-                        yield text
+        for attempt in range(2):
+            try:
+                async with self._create_client() as client:
+                    async with client.stream("POST", self._chat_url(), json=payload) as resp:
+                        resp.raise_for_status()
+                        async for line in resp.aiter_lines():
+                            if not line.strip():
+                                continue
+                            try:
+                                chunk = json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+                            text = chunk.get("message", {}).get("content", "")
+                            if text:
+                                yield text
+                        return  # Successfully finished streaming
+            except (httpx.RemoteProtocolError, httpx.TransportError) as e:
+                logger.warning("Ollama stream attempt %d disconnected: %s. Retrying...", attempt + 1, e)
+                if attempt == 1:
+                    raise e
 
     # ── Embeddings ─────────────────────────────────────────────────────────
 
