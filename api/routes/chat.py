@@ -341,15 +341,20 @@ async def send_message(
 
     # ── Parallel execution of initial I/O ───────────────────────────────────
     def _fetch_db_data():
-        s = db.table("chat_sessions").select("*").eq("id", body.session_id).single().execute()
-        if not s.data or s.data["user_id"] != user_id:
-            return s, None, None
-        p = db.table("profiles").select("full_name, academic_role, department, year, interests, synthesized_memory").eq("id", user_id).single().execute()
-        h = db.table("messages").select("role, content").eq("session_id", body.session_id).order("created_at", desc=True).limit(20).execute()
-        # Reverse to restore chronological order
-        if h.data:
-            h.data = h.data[::-1]
-        return s, p, h
+        for attempt in range(2):
+            try:
+                s = db.table("chat_sessions").select("*").eq("id", body.session_id).single().execute()
+                if not s.data or s.data["user_id"] != user_id:
+                    return s, None, None
+                p = db.table("profiles").select("full_name, academic_role, department, year, interests, synthesized_memory").eq("id", user_id).single().execute()
+                h = db.table("messages").select("role, content").eq("session_id", body.session_id).order("created_at", desc=True).limit(20).execute()
+                if h.data:
+                    h.data = h.data[::-1]
+                return s, p, h
+            except Exception as ex:
+                if attempt == 1:
+                    raise ex
+                logger.warning("Supabase DB fetch attempt %d failed (%s). Retrying...", attempt + 1, ex)
 
     intent_prompt = INTENT_CLASSIFICATION_PROMPT.format(user_message=body.message)
     intent_task = asyncio.create_task(llm.generate_json(intent_prompt, fast_model=True))
