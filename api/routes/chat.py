@@ -601,26 +601,28 @@ async def _handle_department_query(
     
     # Hybrid fallback: exact keyword search for proper nouns / rare words
     import re
-    if search_keywords:
-        keywords = [kw for kw in search_keywords if kw and len(kw) > 2]
-    else:
-        stop_words = {"what", "when", "where", "which", "who", "whom", "whose", "why", "how", "this", "that", "these", "those", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "will", "would", "shall", "should", "can", "could", "may", "might", "must", "about", "above", "across", "after", "against", "along", "among", "around", "at", "before", "behind", "below", "beneath", "beside", "between", "beyond", "but", "by", "concerning", "considering", "despite", "down", "during", "except", "for", "from", "in", "inside", "into", "like", "near", "of", "off", "on", "onto", "out", "outside", "over", "past", "regarding", "round", "since", "through", "throughout", "till", "to", "toward", "under", "underneath", "until", "up", "upon", "with", "within", "without", "number", "email", "office", "chamber", "room", "department", "csis", "bits", "pilani", "user", "assistant", "provided", "context", "documents", "according", "located", "information", "found", "source", "relevance", "based", "contact"}
-        keywords = [w for w in set(re.findall(r'\b[a-zA-Z]{4,}\b', search_query)) if w.lower() not in stop_words]
+    # Supplement LLM intent keywords with regex extraction to guarantee proper nouns aren't missed
+    stop_words = {"what", "when", "where", "which", "who", "whom", "whose", "why", "how", "this", "that", "these", "those", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "will", "would", "shall", "should", "can", "could", "may", "might", "must", "about", "above", "across", "after", "against", "along", "among", "around", "at", "before", "behind", "below", "beneath", "beside", "between", "beyond", "but", "by", "concerning", "considering", "despite", "down", "during", "except", "for", "from", "in", "inside", "into", "like", "near", "of", "off", "on", "onto", "out", "outside", "over", "past", "regarding", "round", "since", "through", "throughout", "till", "to", "toward", "under", "underneath", "until", "up", "upon", "with", "within", "without", "number", "email", "office", "chamber", "room", "department", "csis", "bits", "pilani", "user", "assistant", "provided", "context", "documents", "according", "located", "information", "found", "source", "relevance", "based", "contact"}
+    extracted = [w for w in set(re.findall(r'\b[a-zA-Z]{4,}\b', search_query)) if w.lower() not in stop_words]
+    raw_kws = (search_keywords or []) + extracted
+    keywords = list(set([k.lower() for k in raw_kws if k and len(k) > 2]))
     
     hybrid_chunks = []
     if keywords:
-        or_conds = ",".join(f"content.ilike.*{kw}*" for kw in keywords)
-        kw_resp = db.table("rag_chunks").select("id, content").or_(or_conds).limit(5).execute()
-        if kw_resp.data:
-            for kw_chunk in kw_resp.data:
-                kw_chunk["similarity"] = 0.99  # Keyword match score
-                kw_chunk["file_name"] = "Keyword Search Match"
-                # Isolate the exact matching line(s) to prevent LLM hallucination on noisy tables
-                matched_lines = [line.strip() for line in kw_chunk["content"].split("\n") 
-                               if any(kw.lower() in line.lower() for kw in keywords)]
-                if matched_lines:
-                    kw_chunk["content"] = "\n".join(matched_lines)
-                hybrid_chunks.append(kw_chunk)
+        ignore_kws = {"prof", "professor", "dr", "room", "chamber", "email", "number", "course", "syllabus", "list", "all", "the", "and"}
+        filtered_kws = [kw for kw in keywords if kw not in ignore_kws]
+        if not filtered_kws:
+            filtered_kws = keywords
+
+        for kw in filtered_kws:
+            # fetch up to 5 chunks to ensure we don't miss the one containing the actual target
+            kw_resp = db.table("rag_chunks").select("id, content").ilike("content", f"%{kw}%").limit(5).execute()
+            if kw_resp.data:
+                for kw_chunk in kw_resp.data:
+                    kw_chunk["similarity"] = 0.99
+                    kw_chunk["file_name"] = "Keyword Search Match"
+                    # Pass the entire chunk to preserve table headers and surrounding context!
+                    hybrid_chunks.append(kw_chunk)
                 
     # Combine results
     all_chunks = hybrid_chunks + (match_result.data or [])
@@ -646,7 +648,11 @@ async def _handle_department_query(
         rag_context=rag_context,
     )
 
-    full_prompt = f"Conversation history:\n{conversation_context}\n\nCurrent question: {user_message}"
+    if conversation_context.strip():
+        full_prompt = f"Previous conversation for context:\n{conversation_context}\n\n---\n\nCurrent question: {user_message}"
+    else:
+        full_prompt = f"Current question: {user_message}"
+    
     return await llm.generate(full_prompt, system_prompt=system_prompt)
 
 
@@ -673,26 +679,28 @@ async def _handle_department_query_stream(
     
     # Hybrid fallback: exact keyword search for proper nouns / rare words
     import re
-    if search_keywords:
-        keywords = [kw for kw in search_keywords if kw and len(kw) > 2]
-    else:
-        stop_words = {"what", "when", "where", "which", "who", "whom", "whose", "why", "how", "this", "that", "these", "those", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "will", "would", "shall", "should", "can", "could", "may", "might", "must", "about", "above", "across", "after", "against", "along", "among", "around", "at", "before", "behind", "below", "beneath", "beside", "between", "beyond", "but", "by", "concerning", "considering", "despite", "down", "during", "except", "for", "from", "in", "inside", "into", "like", "near", "of", "off", "on", "onto", "out", "outside", "over", "past", "regarding", "round", "since", "through", "throughout", "till", "to", "toward", "under", "underneath", "until", "up", "upon", "with", "within", "without", "number", "email", "office", "chamber", "room", "department", "csis", "bits", "pilani", "user", "assistant", "provided", "context", "documents", "according", "located", "information", "found", "source", "relevance", "based", "contact"}
-        keywords = [w for w in set(re.findall(r'\b[a-zA-Z]{4,}\b', search_query)) if w.lower() not in stop_words]
+    # Supplement LLM intent keywords with regex extraction to guarantee proper nouns aren't missed
+    stop_words = {"what", "when", "where", "which", "who", "whom", "whose", "why", "how", "this", "that", "these", "those", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "will", "would", "shall", "should", "can", "could", "may", "might", "must", "about", "above", "across", "after", "against", "along", "among", "around", "at", "before", "behind", "below", "beneath", "beside", "between", "beyond", "but", "by", "concerning", "considering", "despite", "down", "during", "except", "for", "from", "in", "inside", "into", "like", "near", "of", "off", "on", "onto", "out", "outside", "over", "past", "regarding", "round", "since", "through", "throughout", "till", "to", "toward", "under", "underneath", "until", "up", "upon", "with", "within", "without", "number", "email", "office", "chamber", "room", "department", "csis", "bits", "pilani", "user", "assistant", "provided", "context", "documents", "according", "located", "information", "found", "source", "relevance", "based", "contact"}
+    extracted = [w for w in set(re.findall(r'\b[a-zA-Z]{4,}\b', search_query)) if w.lower() not in stop_words]
+    raw_kws = (search_keywords or []) + extracted
+    keywords = list(set([k.lower() for k in raw_kws if k and len(k) > 2]))
     
     hybrid_chunks = []
     if keywords:
-        or_conds = ",".join(f"content.ilike.*{kw}*" for kw in keywords)
-        kw_resp = db.table("rag_chunks").select("id, content").or_(or_conds).limit(5).execute()
-        if kw_resp.data:
-            for kw_chunk in kw_resp.data:
-                kw_chunk["similarity"] = 0.99  # Keyword match score
-                kw_chunk["file_name"] = "Keyword Search Match"
-                # Isolate the exact matching line(s) to prevent LLM hallucination on noisy tables
-                matched_lines = [line.strip() for line in kw_chunk["content"].split("\n") 
-                               if any(kw.lower() in line.lower() for kw in keywords)]
-                if matched_lines:
-                    kw_chunk["content"] = "\n".join(matched_lines)
-                hybrid_chunks.append(kw_chunk)
+        ignore_kws = {"prof", "professor", "dr", "room", "chamber", "email", "number", "course", "syllabus", "list", "all", "the", "and"}
+        filtered_kws = [kw for kw in keywords if kw not in ignore_kws]
+        if not filtered_kws:
+            filtered_kws = keywords
+
+        for kw in filtered_kws:
+            # fetch up to 5 chunks to ensure we don't miss the one containing the actual target
+            kw_resp = db.table("rag_chunks").select("id, content").ilike("content", f"%{kw}%").limit(5).execute()
+            if kw_resp.data:
+                for kw_chunk in kw_resp.data:
+                    kw_chunk["similarity"] = 0.99
+                    kw_chunk["file_name"] = "Keyword Search Match"
+                    # Pass the entire chunk to preserve table headers and surrounding context!
+                    hybrid_chunks.append(kw_chunk)
                 
     # Combine results
     all_chunks = hybrid_chunks + (match_result.data or [])
@@ -717,7 +725,11 @@ async def _handle_department_query_stream(
         rag_context=rag_context,
     )
 
-    full_prompt = f"Conversation history:\n{conversation_context}\n\nCurrent question: {user_message}"
+    if conversation_context.strip():
+        full_prompt = f"Previous conversation for context:\n{conversation_context}\n\n---\n\nCurrent question: {user_message}"
+    else:
+        full_prompt = f"Current question: {user_message}"
+    
     async for chunk in llm.generate_stream(full_prompt, system_prompt=system_prompt):
         yield chunk
 

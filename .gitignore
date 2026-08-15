@@ -25,3 +25,6 @@ coverage.xml
 .DS_Store
 *.sh
 *.log
+
+# RAG Fixes Doc
+rag_fixes_summary.md
