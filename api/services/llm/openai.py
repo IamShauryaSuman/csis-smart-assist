@@ -119,3 +119,15 @@ class OpenAICompatibleClient(BaseLLMClient):
         except json.JSONDecodeError:
             logger.error("Failed to parse JSON response from OpenAI-compatible provider: %s", raw_text[:200])
             return {"error": "Failed to parse response", "raw": raw_text}
+
+    async def embed(self, text: str) -> list[float]:
+        """Generate an embedding vector for the given text."""
+        response = await self._client.embeddings.create(
+            input=text,
+            model=self._model,
+        )
+        return response.data[0].embedding
+
+    async def embed_query(self, text: str) -> list[float]:
+        """Generate an embedding vector for a query (same as embed for most generic providers)."""
+        return await self.embed(text)

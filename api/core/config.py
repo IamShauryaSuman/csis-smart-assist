@@ -59,6 +59,15 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_model: str = "meta-llama/llama-3.3-70b-instruct:free"
 
+    # ── AI Provider Toggles ─────────────────────────────────────────────────
+    llm_provider: str = "gemini"  # Options: gemini, ollama
+    embedding_provider: str = "gemini"  # Options: gemini, ollama
+
+    # ── Ollama Local Setup ──────────────────────────────────────────────────
+    ollama_base_url: str = "http://localhost:11434/v1"
+    ollama_model: str = "llama3:8b"
+    ollama_embedding_model: str = "nomic-embed-text"
+
     @property
     def google_service_account_info(self) -> dict[str, Any]:
         """Decode the base64-encoded service account JSON into a dict."""
